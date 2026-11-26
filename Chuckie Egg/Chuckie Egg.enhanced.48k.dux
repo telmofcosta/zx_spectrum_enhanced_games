@@ -1,0 +1,1953 @@
+; Chuckie Egg (A&F Software): ULAX driver with the Spec256 colours.
+;
+; A .dux file fills ULAX memory for one snapshot (chuckiegg.sna / .szx). Format: docs/file_formats/ulax.md.
+; It has two parts:
+;   1. COMMANDS (addresses 10xxxx, below): one point-machine command per Z80 code address (xxxx is the
+;      48K address). They run when the Z80 executes the instruction at that address, and move the colour
+;      of sprite pixels along with the sprite data. They are copied unchanged from the ULAX driver
+;      (chuckiegg.dux of 'Chuckie Egg'); this file does not decode each one.
+;      C08D / C08E: enable colour tags and load the active colours from reference colours 8,D / 8,E.
+;      C888: back to the standard Spectrum colours with tags disabled. 0130, 0131, 0113 and the others:
+;      pixel copy commands (see the docs).
+;   2. COLOUR DATA (addresses 80xxxx, after the commands): the colour of sprite bytes in the game's RAM.
+;
+; What differs from the ULAX driver is the colour data only. The ULAX driver picked its own colours;
+; here each byte it colours takes its colour from the Spec256 version (chuckie.gfx + chuckie.sna, recoloured
+; by Ville Torren), converted through the Spec256 palette to a ULAX direct colour GRB555 (0GGGGGRRRRRBBBBB).
+; The same bytes are coloured as in the ULAX driver; every other pixel keeps the Spectrum attribute colours.
+;
+109308	0130
+10930E	0213 0 0130
+109315	0213
+10934B	0133
+1093A2	0130 0113	; CHANGED from 0131 0113, see below
+
+1092FD	C08D
+10935E	C888
+10935F	C888
+1093DC	C888
+
+
+109A70	0111 0 0111	; CHANGED from 0100 0 0100, see below
+109A86	5A11 0 0 5C11 0 0 5C11
+109B11	0131 0931 0113	; CHANGED from 0131 0730 0113, see below
+109B4E	0131 0113 0 0 0131 0113 0 0 0131 0113
+109B93	0133
+
+109A6E	C888	; CHANGED from C08E, see below
+109A93	C888
+
+
+; CHANGED and ADDED commands, for the corn pile (see the end of this file). The game draws a tile with an
+; 8-byte copy loop (LD A,(HL) / LD (DE),A; the tile table is at 84F0). 0130 reads the tile byte's pixels into
+; register 3, with the codes FFF0 to FFF7 replaced by the pixels of the translation register T (this needs tags
+; on, see the bricks below), and 0113 writes them to the screen byte, so the colours of a tile byte travel with
+; it, as in the Spec256 colour memory. Tiles whose bytes carry no colour copy as plain Spectrum pixels.
+; ADDED 109C83: the loop at 9C80-9C87 draws most tiles to the screen. The loop at 93A0-93A6 does the same: its
+;   pair 0131 0113 at 1093A2 (above) is CHANGED to 0130 0113. 0131 is the same read without the T codes.
+109C83	0130 0113
+; ADDED 109AD1 and 109AD3: the loop at 9AD1-9ADC copies the 3 x 3 tiles around Harry into a background buffer
+;   at 72DD (LD A,(HL) at 9AD1, LD (IX+0),A at 9AD2-9AD4, whose last M1 is 9AD3).
+109AD1	0130
+109AD3	0113
+; CHANGED 109B11 (above): 0131 0730 0113 became 0131 0931 0113. The loop at 9B11-9B16 draws Harry over that
+;   background (LD A,(DE) / OR (HL) / LD (DE),A, DE = the sprite buffer 72A0, HL = the background). The
+;   ULAX driver's 0730 is xmask with source register 0, the background byte in plain ink and paper, which drops
+;   the background's colours: the pile turned magenta whenever Harry came near it and stayed so. 0931 is xback
+;   with source register 1, the background pixels with their colours; where both Harry and the background have
+;   a colour, Harry's pixel stays.
+; CHANGED 109A70 and 109A6E: the routine at 9A4C copies Harry's frame into the sprite buffer (72A0) with two LDI
+;   instructions (ED A0 at 9A6F and 9A71; 9A70 and 9A72 are the last M1 of each). The ULAX driver's 0100 writes
+;   the byte in the active colours, which only its tags set, so it can give a byte one ink and one paper.
+;   0111 (the cheat-sheet command for ldi) copies the pixels with their own colours instead, which is what
+;   gives every pixel of Harry its Spec256 colour. C08E at 9A6E (tags on, active colours = reference colours 8
+;   and E) became C888 (standard colours, tags off), so the padding byte the loop writes after each row stays
+;   a plain paper pixel and is not turned into a coloured one.
+;
+; ADDED, for the bricks (platforms), whose colours change with the level (see the end of this file):
+;   10A600 and 10A6F5: 5FF1 loads the translation register T from the pixels of the byte an LDIR has just read.
+;      The two LDIR instructions that copy a level's map to 61A8 (A5FF at the start of the game, A6F4 at every
+;      later level) end on the last byte of the map block, so T ends up as the pixels the dux gives that byte:
+;      a colour scheme per level.
+;   109C7D / 109C89, 109398 / 1093A8, 109ACF / 109ADE: C088 turns colour tags on (with the standard colours) just
+;      before each of the three loops that copy a tile's bytes, and C888 turns them off just after, so that the
+;      codes FFF0 to FFF7 in the pixels the loops read resolve through T (they only do with tags on) and nothing
+;      else changes.
+10A600	5FF1	; T = pixels of the map byte just copied (game start)
+10A6F5	5FF1	; T = pixels of the map byte just copied (next level)
+109C7D	C088	; tags on, before the tile loop at 9C83
+109C89	C888	; tags off, after it
+109398	C088	; tags on, before the tile loop at 93A2
+1093A8	C888	; tags off, after it
+109ACF	C088	; tags on, before the background loop at 9AD1
+109ADE	C888	; tags off, after it
+; Chuckie Egg, ULAX driver with the Spec256 colours.
+; The point-machine commands above are those of the ULAX driver (chuckiegg.dux).
+; Harry and the hens are coloured from the Spec256 file chuckie.gfx instead of the ULAX driver's own colours,
+; through the Spec256 palette, as GRB555 words. Spec256 recolouring: Ville Torren.
+; The ULAX driver's own palette (701000, 701010) is not used: every colour below is a direct colour word.
+;
+; HARRY: the ULAX driver tags a few bytes of each frame and leaves the other pixels to the colour of the last
+; tag read, so some pixels had no colour of their own (the face took the hat's colour when Harry faced right;
+; the eye and the arms took the colour of a ladder behind them). Here every pixel of every Harry frame has
+; its own Spec256 colour (hat crown and grey brim, face, white eye, shirt, blue jeans), written as
+; eight colour words per byte. The exception is the boots: Spec256 colours them with a different shade in each
+; frame (and leaves some feet uncoloured, which show white), so Mr. Telmo asked for yellow rain boots: 71=FFFF00
+; for the boot and 70=EFCE00 for the sole, the pixels with no pixel below them (marked "boot" on the lines).
+; Two more differences from Spec256, also Mr. Telmo's choice: the SHIRT is one pale blue in every frame, between
+; Spec256's two (86=DBDBDB when Harry walks, 22=9EDFD2 when he climbs: their mean is BDDDD6) and then halfway to
+; white, DEEEEA; and the climbing frames get
+; the grey stripe of the hat brim (76=AEAE8A on the four middle pixels of the brim row), which Spec256 gives only
+; the walking frames. A hole that is closed on all sides by Harry's pixels (the pupil of the eye,
+; the gaps in the body) is written as black, 0000, so nothing behind Harry shows through it.
+;
+; THE HENS: the ULAX driver tags bytes. A BLANK BYTE (no set pixel in the snapshot) has no Spec256 colour of
+; its own. It is tagged anyway, because a tag travels with the byte when the game copies a sprite frame, and
+; the pixels the game adds to the copy take the tag's colour (seen: with the ULAX tag left on them, the eating
+; hen was drawn light blue). So a blank byte gets the colour of the sprite part it belongs to, taken from
+; the other bytes of the same ULAX ink group; this is a choice of this file, not a value read from Spec256:
+;   ink 9010 and 9011 (the hen): the most common Spec256 colour of the group, 71=FFFF00 and 69=E3A200.
+;   The hens' colours are palette-index words (palette entries 1010 and up, listed at the end of this file), like
+;   the ULAX driver's own, and not direct colour words: in tests the hen routine, which ORs its pixels onto the
+;   screen under an ink / paper mask, lost the head of the hen eating towards the right when it was given direct
+;   colours. The bytes the ULAX driver tags 8000 or 8001, which keep the plain colours of the Spectrum (the food
+;   baked into the eating frames of the hen), are coloured here too, yellow, as Spec256 has them.
+;
+; Each line below sets the 8 pixels of one byte at the game address 80xxxx (the leftmost pixel first).
+;   FFFC ink 8000      colour tag: the pixel after FFFC is the ink of the byte's set bits, the next is the
+;                      paper (8000 = the Spectrum paper colour). 8001 = the Spectrum ink colour.
+;   eight words        one colour per pixel: a colour word for a set bit, 8000 for a clear bit.
+; The comment on each line gives the Spec256 palette index and its RGB.
+;
+; Sprites. Every sprite frame is 16 rows of 2 bytes (16 x 16 pixels, 32 bytes) in the game's RAM; the lines
+; below give the address of a byte, its frame, row and column. The names come from the shape of the
+; bitmaps in chuckiegg.sna and are inferred, not taken from any document:
+;   8DF0-8EEF  Harry the farmer, 8 frames          8F90-8FEF  Harry the farmer, 4 frames (arms out)
+;   9010-910F  the hen, 8 frames
+; Not coloured by this driver: the text; it keeps the Spectrum attribute colours. The corn pile, the egg, the
+; ladders, the big duck and its cage and the bricks (end of this file) are not coloured by the ULAX driver
+; either; they are added here.
+;
+;
+; Frame at 8DF0: Harry the farmer (hat brim = the wide row), frame 1 of 8
+; 8DF0 ................
+; 8DF2 ......###.......
+; 8DF4 ......####......
+; 8DF6 ......####......
+; 8DF8 ..############..
+; 8DFA ......##.#......
+; 8DFC ......####......
+; 8DFE .......##.......
+; 8E00 ......#####.....
+; 8E02 .....##.####....
+; 8E04 .....##.####....
+; 8E06 .....##.###.....
+; 8E08 ......####......
+; 8E0A .......#........
+; 8E0C .......###......
+; 8E0E ................
+; (4 hole pixels closed on all sides, written as black)
+808DF2	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8DF0 row 1 left byte: Spec256 - - - - - - 36 36
+808DF3	42EB 8000 8000 8000 8000 8000 8000 8000	; 8DF0 row 1 right byte: Spec256 36 - - - - - - -
+808DF4	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8DF0 row 2 left byte: Spec256 - - - - - - 36 36
+808DF5	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8DF0 row 2 right byte: Spec256 36 36 - - - - - -
+808DF6	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8DF0 row 3 left byte: Spec256 - - - - - - 36 36
+808DF7	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8DF0 row 3 right byte: Spec256 36 36 - - - - - -
+808DF8	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8DF0 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808DF9	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8DF0 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808DFA	8000 8000 8000 8000 8000 8000 5F94 7F9F	; 8DF0 row 5 left byte: Spec256 - - - - - - 38 7
+808DFB	0000 5F94 8000 8000 8000 8000 8000 8000	; 8DF0 row 5 right byte: Spec256 black 38 - - - - - -
+808DFC	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8DF0 row 6 left byte: Spec256 - - - - - - 38 38
+808DFD	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8DF0 row 6 right byte: Spec256 38 38 - - - - - -
+808DFE	8000 8000 8000 8000 8000 8000 8000 5F94	; 8DF0 row 7 left byte: Spec256 - - - - - - - 38
+808DFF	5F94 8000 8000 8000 8000 8000 8000 8000	; 8DF0 row 7 right byte: Spec256 38 - - - - - - -
+808E00	8000 8000 8000 8000 8000 8000 777D 777D	; 8DF0 row 8 left byte: Spec256 - - - - - - shirt shirt
+808E01	777D 777D 777D 8000 8000 8000 8000 8000	; 8DF0 row 8 right byte: Spec256 shirt shirt shirt - - - - -
+808E02	8000 8000 8000 8000 8000 777D 777D 0000	; 8DF0 row 9 left byte: Spec256 - - - - - shirt shirt black
+808E03	777D 777D 777D 777D 8000 8000 8000 8000	; 8DF0 row 9 right byte: Spec256 shirt shirt shirt shirt - - - -
+808E04	8000 8000 8000 8000 8000 777D 777D 0000	; 8DF0 row 10 left byte: Spec256 - - - - - shirt shirt black
+808E05	777D 777D 4979 30D7 8000 8000 8000 8000	; 8DF0 row 10 right byte: Spec256 shirt shirt 4 3 - - - -
+808E06	8000 8000 8000 8000 8000 30D7 30D7 0000	; 8DF0 row 11 left byte: Spec256 - - - - - 3 3 black
+808E07	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8DF0 row 11 right byte: Spec256 3 3 3 - - - - -
+808E08	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8DF0 row 12 left byte: Spec256 - - - - - - 3 3
+808E09	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8DF0 row 12 right byte: Spec256 3 3 - - - - - -
+808E0A	8000 8000 8000 8000 8000 8000 8000 7FE0	; 8DF0 row 13 left byte: Spec256 - - - - - - - boot
+808E0C	8000 8000 8000 8000 8000 8000 8000 67A0	; 8DF0 row 14 left byte: Spec256 - - - - - - - boot
+808E0D	67A0 67A0 8000 8000 8000 8000 8000 8000	; 8DF0 row 14 right byte: Spec256 boot boot - - - - - -
+;
+; Frame at 8E10: Harry the farmer (hat brim = the wide row), frame 2 of 8
+; 8E10 ................
+; 8E12 ......###.......
+; 8E14 ......####......
+; 8E16 ......####......
+; 8E18 ..############..
+; 8E1A ......##.#......
+; 8E1C ......####......
+; 8E1E .......##.......
+; 8E20 ......#####.....
+; 8E22 .....##.####....
+; 8E24 .....#.#####....
+; 8E26 .....#.####.....
+; 8E28 ......####......
+; 8E2A .....#...#.#....
+; 8E2C ......#...#.....
+; 8E2E ................
+; (4 hole pixels closed on all sides, written as black)
+808E12	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E10 row 1 left byte: Spec256 - - - - - - 36 36
+808E13	42EB 8000 8000 8000 8000 8000 8000 8000	; 8E10 row 1 right byte: Spec256 36 - - - - - - -
+808E14	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E10 row 2 left byte: Spec256 - - - - - - 36 36
+808E15	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E10 row 2 right byte: Spec256 36 36 - - - - - -
+808E16	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E10 row 3 left byte: Spec256 - - - - - - 36 36
+808E17	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E10 row 3 right byte: Spec256 36 36 - - - - - -
+808E18	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8E10 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808E19	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8E10 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808E1A	8000 8000 8000 8000 8000 8000 5F94 7F9F	; 8E10 row 5 left byte: Spec256 - - - - - - 38 7
+808E1B	0000 5F94 8000 8000 8000 8000 8000 8000	; 8E10 row 5 right byte: Spec256 black 38 - - - - - -
+808E1C	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8E10 row 6 left byte: Spec256 - - - - - - 38 38
+808E1D	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8E10 row 6 right byte: Spec256 38 38 - - - - - -
+808E1E	8000 8000 8000 8000 8000 8000 8000 5F94	; 8E10 row 7 left byte: Spec256 - - - - - - - 38
+808E1F	5F94 8000 8000 8000 8000 8000 8000 8000	; 8E10 row 7 right byte: Spec256 38 - - - - - - -
+808E20	8000 8000 8000 8000 8000 8000 777D 777D	; 8E10 row 8 left byte: Spec256 - - - - - - shirt shirt
+808E21	777D 777D 777D 8000 8000 8000 8000 8000	; 8E10 row 8 right byte: Spec256 shirt shirt shirt - - - - -
+808E22	8000 8000 8000 8000 8000 777D 777D 0000	; 8E10 row 9 left byte: Spec256 - - - - - shirt shirt black
+808E23	777D 777D 777D 777D 8000 8000 8000 8000	; 8E10 row 9 right byte: Spec256 shirt shirt shirt shirt - - - -
+808E24	8000 8000 8000 8000 8000 777D 0000 777D	; 8E10 row 10 left byte: Spec256 - - - - - shirt black shirt
+808E25	777D 777D 4979 30D7 8000 8000 8000 8000	; 8E10 row 10 right byte: Spec256 shirt shirt 4 3 - - - -
+808E26	8000 8000 8000 8000 8000 30D7 0000 30D7	; 8E10 row 11 left byte: Spec256 - - - - - 3 black 3
+808E27	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8E10 row 11 right byte: Spec256 3 3 3 - - - - -
+808E28	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8E10 row 12 left byte: Spec256 - - - - - - 3 3
+808E29	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8E10 row 12 right byte: Spec256 3 3 - - - - - -
+808E2A	8000 8000 8000 8000 8000 67A0 8000 8000	; 8E10 row 13 left byte: Spec256 - - - - - boot - -
+808E2B	8000 67A0 8000 67A0 8000 8000 8000 8000	; 8E10 row 13 right byte: Spec256 - boot - boot - - - -
+808E2C	8000 8000 8000 8000 8000 8000 67A0 8000	; 8E10 row 14 left byte: Spec256 - - - - - - boot -
+808E2D	8000 8000 67A0 8000 8000 8000 8000 8000	; 8E10 row 14 right byte: Spec256 - - boot - - - - -
+;
+; Frame at 8E30: Harry the farmer (hat brim = the wide row), frame 3 of 8
+; 8E30 ................
+; 8E32 ......###.......
+; 8E34 ......####......
+; 8E36 ......####......
+; 8E38 ..############..
+; 8E3A ......##.#......
+; 8E3C ......####......
+; 8E3E .......##.......
+; 8E40 ......#####.....
+; 8E42 .....##.####....
+; 8E44 .....##.####....
+; 8E46 .....##.###.....
+; 8E48 ......####......
+; 8E4A .......#........
+; 8E4C .......###......
+; 8E4E ................
+; (4 hole pixels closed on all sides, written as black)
+808E32	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E30 row 1 left byte: Spec256 - - - - - - 36 36
+808E33	42EB 8000 8000 8000 8000 8000 8000 8000	; 8E30 row 1 right byte: Spec256 36 - - - - - - -
+808E34	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E30 row 2 left byte: Spec256 - - - - - - 36 36
+808E35	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E30 row 2 right byte: Spec256 36 36 - - - - - -
+808E36	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E30 row 3 left byte: Spec256 - - - - - - 36 36
+808E37	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E30 row 3 right byte: Spec256 36 36 - - - - - -
+808E38	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8E30 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808E39	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8E30 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808E3A	8000 8000 8000 8000 8000 8000 5F94 7F9F	; 8E30 row 5 left byte: Spec256 - - - - - - 38 7
+808E3B	0000 5F94 8000 8000 8000 8000 8000 8000	; 8E30 row 5 right byte: Spec256 black 38 - - - - - -
+808E3C	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8E30 row 6 left byte: Spec256 - - - - - - 38 38
+808E3D	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8E30 row 6 right byte: Spec256 38 38 - - - - - -
+808E3E	8000 8000 8000 8000 8000 8000 8000 5F94	; 8E30 row 7 left byte: Spec256 - - - - - - - 38
+808E3F	5F94 8000 8000 8000 8000 8000 8000 8000	; 8E30 row 7 right byte: Spec256 38 - - - - - - -
+808E40	8000 8000 8000 8000 8000 8000 777D 777D	; 8E30 row 8 left byte: Spec256 - - - - - - shirt shirt
+808E41	777D 777D 777D 8000 8000 8000 8000 8000	; 8E30 row 8 right byte: Spec256 shirt shirt shirt - - - - -
+808E42	8000 8000 8000 8000 8000 777D 777D 0000	; 8E30 row 9 left byte: Spec256 - - - - - shirt shirt black
+808E43	777D 777D 777D 777D 8000 8000 8000 8000	; 8E30 row 9 right byte: Spec256 shirt shirt shirt shirt - - - -
+808E44	8000 8000 8000 8000 8000 777D 777D 0000	; 8E30 row 10 left byte: Spec256 - - - - - shirt shirt black
+808E45	777D 4979 30D7 30D7 8000 8000 8000 8000	; 8E30 row 10 right byte: Spec256 shirt 4 3 3 - - - -
+808E46	8000 8000 8000 8000 8000 30D7 30D7 0000	; 8E30 row 11 left byte: Spec256 - - - - - 3 3 black
+808E47	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8E30 row 11 right byte: Spec256 3 3 3 - - - - -
+808E48	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8E30 row 12 left byte: Spec256 - - - - - - 3 3
+808E49	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8E30 row 12 right byte: Spec256 3 3 - - - - - -
+808E4A	8000 8000 8000 8000 8000 8000 8000 7FE0	; 8E30 row 13 left byte: Spec256 - - - - - - - boot
+808E4C	8000 8000 8000 8000 8000 8000 8000 67A0	; 8E30 row 14 left byte: Spec256 - - - - - - - boot
+808E4D	67A0 67A0 8000 8000 8000 8000 8000 8000	; 8E30 row 14 right byte: Spec256 boot boot - - - - - -
+;
+; Frame at 8E50: Harry the farmer (hat brim = the wide row), frame 4 of 8
+; 8E50 ................
+; 8E52 ......###.......
+; 8E54 ......####......
+; 8E56 ......####......
+; 8E58 ..############..
+; 8E5A ......##.#......
+; 8E5C ......####......
+; 8E5E .......##.......
+; 8E60 ......#####.....
+; 8E62 .....##.####....
+; 8E64 .....###..##....
+; 8E66 .....######.....
+; 8E68 ......####......
+; 8E6A .....#...#.#....
+; 8E6C ......#...#.....
+; 8E6E ................
+; (4 hole pixels closed on all sides, written as black)
+808E52	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E50 row 1 left byte: Spec256 - - - - - - 36 36
+808E53	42EB 8000 8000 8000 8000 8000 8000 8000	; 8E50 row 1 right byte: Spec256 36 - - - - - - -
+808E54	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E50 row 2 left byte: Spec256 - - - - - - 36 36
+808E55	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E50 row 2 right byte: Spec256 36 36 - - - - - -
+808E56	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E50 row 3 left byte: Spec256 - - - - - - 36 36
+808E57	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E50 row 3 right byte: Spec256 36 36 - - - - - -
+808E58	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8E50 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808E59	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8E50 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808E5A	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8E50 row 5 left byte: Spec256 - - - - - - 38 38
+808E5B	0000 5F94 8000 8000 8000 8000 8000 8000	; 8E50 row 5 right byte: Spec256 black 38 - - - - - -
+808E5C	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8E50 row 6 left byte: Spec256 - - - - - - 38 38
+808E5D	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8E50 row 6 right byte: Spec256 38 38 - - - - - -
+808E5E	8000 8000 8000 8000 8000 8000 8000 5F94	; 8E50 row 7 left byte: Spec256 - - - - - - - 38
+808E5F	5F94 8000 8000 8000 8000 8000 8000 8000	; 8E50 row 7 right byte: Spec256 38 - - - - - - -
+808E60	8000 8000 8000 8000 8000 8000 777D 777D	; 8E50 row 8 left byte: Spec256 - - - - - - shirt shirt
+808E61	777D 777D 777D 8000 8000 8000 8000 8000	; 8E50 row 8 right byte: Spec256 shirt shirt shirt - - - - -
+808E62	8000 8000 8000 8000 8000 777D 777D 0000	; 8E50 row 9 left byte: Spec256 - - - - - shirt shirt black
+808E63	777D 777D 777D 777D 8000 8000 8000 8000	; 8E50 row 9 right byte: Spec256 shirt shirt shirt shirt - - - -
+808E64	8000 8000 8000 8000 8000 777D 777D 777D	; 8E50 row 10 left byte: Spec256 - - - - - shirt shirt shirt
+808E65	0000 0000 4979 30D7 8000 8000 8000 8000	; 8E50 row 10 right byte: Spec256 black black 4 3 - - - -
+808E66	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8E50 row 11 left byte: Spec256 - - - - - 3 3 3
+808E67	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8E50 row 11 right byte: Spec256 3 3 3 - - - - -
+808E68	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8E50 row 12 left byte: Spec256 - - - - - - 3 3
+808E69	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8E50 row 12 right byte: Spec256 3 3 - - - - - -
+808E6A	8000 8000 8000 8000 8000 67A0 8000 8000	; 8E50 row 13 left byte: Spec256 - - - - - boot - -
+808E6B	8000 67A0 8000 67A0 8000 8000 8000 8000	; 8E50 row 13 right byte: Spec256 - boot - boot - - - -
+808E6C	8000 8000 8000 8000 8000 8000 67A0 8000	; 8E50 row 14 left byte: Spec256 - - - - - - boot -
+808E6D	8000 8000 67A0 8000 8000 8000 8000 8000	; 8E50 row 14 right byte: Spec256 - - boot - - - - -
+;
+; Frame at 8E70: Harry the farmer (hat brim = the wide row), frame 5 of 8
+; 8E70 ................
+; 8E72 .......###......
+; 8E74 ......####......
+; 8E76 ......####......
+; 8E78 ..############..
+; 8E7A ......#.##......
+; 8E7C ......####......
+; 8E7E .......##.......
+; 8E80 .....#####......
+; 8E82 ....####.##.....
+; 8E84 ....####.##.....
+; 8E86 .....###.##.....
+; 8E88 ......####......
+; 8E8A ........#.......
+; 8E8C ......###.......
+; 8E8E ................
+; (4 hole pixels closed on all sides, written as black)
+808E72	8000 8000 8000 8000 8000 8000 8000 42EB	; 8E70 row 1 left byte: Spec256 - - - - - - - 36
+808E73	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E70 row 1 right byte: Spec256 36 36 - - - - - -
+808E74	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E70 row 2 left byte: Spec256 - - - - - - 36 36
+808E75	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E70 row 2 right byte: Spec256 36 36 - - - - - -
+808E76	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E70 row 3 left byte: Spec256 - - - - - - 36 36
+808E77	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E70 row 3 right byte: Spec256 36 36 - - - - - -
+808E78	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8E70 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808E79	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8E70 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808E7A	8000 8000 8000 8000 8000 8000 5F94 0000	; 8E70 row 5 left byte: Spec256 - - - - - - 38 black
+808E7B	7F9F 5F94 8000 8000 8000 8000 8000 8000	; 8E70 row 5 right byte: Spec256 7 38 - - - - - -
+808E7C	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8E70 row 6 left byte: Spec256 - - - - - - 38 38
+808E7D	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8E70 row 6 right byte: Spec256 38 38 - - - - - -
+808E7E	8000 8000 8000 8000 8000 8000 8000 5F94	; 8E70 row 7 left byte: Spec256 - - - - - - - 38
+808E7F	5F94 8000 8000 8000 8000 8000 8000 8000	; 8E70 row 7 right byte: Spec256 38 - - - - - - -
+808E80	8000 8000 8000 8000 8000 777D 777D 777D	; 8E70 row 8 left byte: Spec256 - - - - - shirt shirt shirt
+808E81	777D 777D 8000 8000 8000 8000 8000 8000	; 8E70 row 8 right byte: Spec256 shirt shirt - - - - - -
+808E82	8000 8000 8000 8000 777D 777D 777D 777D	; 8E70 row 9 left byte: Spec256 - - - - shirt shirt shirt shirt
+808E83	0000 777D 777D 8000 8000 8000 8000 8000	; 8E70 row 9 right byte: Spec256 black shirt shirt - - - - -
+808E84	8000 8000 8000 8000 30D7 4979 777D 777D	; 8E70 row 10 left byte: Spec256 - - - - 3 4 shirt shirt
+808E85	0000 777D 777D 8000 8000 8000 8000 8000	; 8E70 row 10 right byte: Spec256 black shirt shirt - - - - -
+808E86	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8E70 row 11 left byte: Spec256 - - - - - 3 3 3
+808E87	0000 30D7 30D7 8000 8000 8000 8000 8000	; 8E70 row 11 right byte: Spec256 black 3 3 - - - - -
+808E88	8000 8000 8000 8000 8000 8000 4979 4979	; 8E70 row 12 left byte: Spec256 - - - - - - 4 4
+808E89	4979 4979 8000 8000 8000 8000 8000 8000	; 8E70 row 12 right byte: Spec256 4 4 - - - - - -
+808E8B	7FE0 8000 8000 8000 8000 8000 8000 8000	; 8E70 row 13 right byte: Spec256 boot - - - - - - -
+808E8C	8000 8000 8000 8000 8000 8000 67A0 67A0	; 8E70 row 14 left byte: Spec256 - - - - - - boot boot
+808E8D	67A0 8000 8000 8000 8000 8000 8000 8000	; 8E70 row 14 right byte: Spec256 boot - - - - - - -
+;
+; Frame at 8E90: Harry the farmer (hat brim = the wide row), frame 6 of 8
+; 8E90 ................
+; 8E92 .......###......
+; 8E94 ......####......
+; 8E96 ......####......
+; 8E98 ..############..
+; 8E9A ......#.##......
+; 8E9C ......####......
+; 8E9E .......##.......
+; 8EA0 .....#####......
+; 8EA2 ....####.##.....
+; 8EA4 ....#####.#.....
+; 8EA6 .....####.#.....
+; 8EA8 ......####......
+; 8EAA ....#.#...#.....
+; 8EAC .....#...#......
+; 8EAE ................
+; (4 hole pixels closed on all sides, written as black)
+808E92	8000 8000 8000 8000 8000 8000 8000 42EB	; 8E90 row 1 left byte: Spec256 - - - - - - - 36
+808E93	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E90 row 1 right byte: Spec256 36 36 - - - - - -
+808E94	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E90 row 2 left byte: Spec256 - - - - - - 36 36
+808E95	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E90 row 2 right byte: Spec256 36 36 - - - - - -
+808E96	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8E90 row 3 left byte: Spec256 - - - - - - 36 36
+808E97	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8E90 row 3 right byte: Spec256 36 36 - - - - - -
+808E98	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8E90 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808E99	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8E90 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808E9A	8000 8000 8000 8000 8000 8000 5F94 0000	; 8E90 row 5 left byte: Spec256 - - - - - - 38 black
+808E9B	7F9F 5F94 8000 8000 8000 8000 8000 8000	; 8E90 row 5 right byte: Spec256 7 38 - - - - - -
+808E9C	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8E90 row 6 left byte: Spec256 - - - - - - 38 38
+808E9D	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8E90 row 6 right byte: Spec256 38 38 - - - - - -
+808E9E	8000 8000 8000 8000 8000 8000 8000 5F94	; 8E90 row 7 left byte: Spec256 - - - - - - - 38
+808E9F	5F94 8000 8000 8000 8000 8000 8000 8000	; 8E90 row 7 right byte: Spec256 38 - - - - - - -
+808EA0	8000 8000 8000 8000 8000 777D 777D 777D	; 8E90 row 8 left byte: Spec256 - - - - - shirt shirt shirt
+808EA1	777D 777D 8000 8000 8000 8000 8000 8000	; 8E90 row 8 right byte: Spec256 shirt shirt - - - - - -
+808EA2	8000 8000 8000 8000 777D 777D 777D 777D	; 8E90 row 9 left byte: Spec256 - - - - shirt shirt shirt shirt
+808EA3	0000 777D 777D 8000 8000 8000 8000 8000	; 8E90 row 9 right byte: Spec256 black shirt shirt - - - - -
+808EA4	8000 8000 8000 8000 4979 777D 777D 777D	; 8E90 row 10 left byte: Spec256 - - - - 4 shirt shirt shirt
+808EA5	777D 0000 777D 8000 8000 8000 8000 8000	; 8E90 row 10 right byte: Spec256 shirt black shirt - - - - -
+808EA6	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8E90 row 11 left byte: Spec256 - - - - - 3 3 3
+808EA7	30D7 0000 30D7 8000 8000 8000 8000 8000	; 8E90 row 11 right byte: Spec256 3 black 3 - - - - -
+808EA8	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8E90 row 12 left byte: Spec256 - - - - - - 3 3
+808EA9	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8E90 row 12 right byte: Spec256 3 3 - - - - - -
+808EAA	8000 8000 8000 8000 67A0 8000 67A0 8000	; 8E90 row 13 left byte: Spec256 - - - - boot - boot -
+808EAB	8000 8000 67A0 8000 8000 8000 8000 8000	; 8E90 row 13 right byte: Spec256 - - boot - - - - -
+808EAC	8000 8000 8000 8000 8000 67A0 8000 8000	; 8E90 row 14 left byte: Spec256 - - - - - boot - -
+808EAD	8000 67A0 8000 8000 8000 8000 8000 8000	; 8E90 row 14 right byte: Spec256 - boot - - - - - -
+;
+; Frame at 8EB0: Harry the farmer (hat brim = the wide row), frame 7 of 8
+; 8EB0 ................
+; 8EB2 .......###......
+; 8EB4 ......####......
+; 8EB6 ......####......
+; 8EB8 ..############..
+; 8EBA ......#.##......
+; 8EBC ......####......
+; 8EBE .......##.......
+; 8EC0 .....#####......
+; 8EC2 ....####.##.....
+; 8EC4 ....####.##.....
+; 8EC6 .....###.##.....
+; 8EC8 ......####......
+; 8ECA ........#.......
+; 8ECC ......###.......
+; 8ECE ................
+; (4 hole pixels closed on all sides, written as black)
+808EB2	8000 8000 8000 8000 8000 8000 8000 42EB	; 8EB0 row 1 left byte: Spec256 - - - - - - - 36
+808EB3	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8EB0 row 1 right byte: Spec256 36 36 - - - - - -
+808EB4	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8EB0 row 2 left byte: Spec256 - - - - - - 36 36
+808EB5	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8EB0 row 2 right byte: Spec256 36 36 - - - - - -
+808EB6	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8EB0 row 3 left byte: Spec256 - - - - - - 36 36
+808EB7	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8EB0 row 3 right byte: Spec256 36 36 - - - - - -
+808EB8	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8EB0 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808EB9	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8EB0 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808EBA	8000 8000 8000 8000 8000 8000 5F94 0000	; 8EB0 row 5 left byte: Spec256 - - - - - - 38 black
+808EBB	7F9F 5F94 8000 8000 8000 8000 8000 8000	; 8EB0 row 5 right byte: Spec256 7 38 - - - - - -
+808EBC	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8EB0 row 6 left byte: Spec256 - - - - - - 38 38
+808EBD	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8EB0 row 6 right byte: Spec256 38 38 - - - - - -
+808EBE	8000 8000 8000 8000 8000 8000 8000 5F94	; 8EB0 row 7 left byte: Spec256 - - - - - - - 38
+808EBF	5F94 8000 8000 8000 8000 8000 8000 8000	; 8EB0 row 7 right byte: Spec256 38 - - - - - - -
+808EC0	8000 8000 8000 8000 8000 777D 777D 777D	; 8EB0 row 8 left byte: Spec256 - - - - - shirt shirt shirt
+808EC1	777D 777D 8000 8000 8000 8000 8000 8000	; 8EB0 row 8 right byte: Spec256 shirt shirt - - - - - -
+808EC2	8000 8000 8000 8000 777D 777D 777D 777D	; 8EB0 row 9 left byte: Spec256 - - - - shirt shirt shirt shirt
+808EC3	0000 777D 777D 8000 8000 8000 8000 8000	; 8EB0 row 9 right byte: Spec256 black shirt shirt - - - - -
+808EC4	8000 8000 8000 8000 30D7 4979 777D 777D	; 8EB0 row 10 left byte: Spec256 - - - - 3 4 shirt shirt
+808EC5	0000 777D 777D 8000 8000 8000 8000 8000	; 8EB0 row 10 right byte: Spec256 black shirt shirt - - - - -
+808EC6	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8EB0 row 11 left byte: Spec256 - - - - - 3 3 3
+808EC7	0000 30D7 30D7 8000 8000 8000 8000 8000	; 8EB0 row 11 right byte: Spec256 black 3 3 - - - - -
+808EC8	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8EB0 row 12 left byte: Spec256 - - - - - - 3 3
+808EC9	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8EB0 row 12 right byte: Spec256 3 3 - - - - - -
+808ECB	7FE0 8000 8000 8000 8000 8000 8000 8000	; 8EB0 row 13 right byte: Spec256 boot - - - - - - -
+808ECC	8000 8000 8000 8000 8000 8000 67A0 67A0	; 8EB0 row 14 left byte: Spec256 - - - - - - boot boot
+808ECD	67A0 8000 8000 8000 8000 8000 8000 8000	; 8EB0 row 14 right byte: Spec256 boot - - - - - - -
+;
+; Frame at 8ED0: Harry the farmer (hat brim = the wide row), frame 8 of 8
+; 8ED0 ................
+; 8ED2 .......###......
+; 8ED4 ......####......
+; 8ED6 ......####......
+; 8ED8 ..############..
+; 8EDA ......#.##......
+; 8EDC ......####......
+; 8EDE .......##.......
+; 8EE0 .....#####......
+; 8EE2 ....####.##.....
+; 8EE4 ....##..###.....
+; 8EE6 .....######.....
+; 8EE8 ......####......
+; 8EEA ....#.#...#.....
+; 8EEC .....#...#......
+; 8EEE ................
+; (4 hole pixels closed on all sides, written as black)
+808ED2	8000 8000 8000 8000 8000 8000 8000 42EB	; 8ED0 row 1 left byte: Spec256 - - - - - - - 36
+808ED3	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8ED0 row 1 right byte: Spec256 36 36 - - - - - -
+808ED4	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8ED0 row 2 left byte: Spec256 - - - - - - 36 36
+808ED5	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8ED0 row 2 right byte: Spec256 36 36 - - - - - -
+808ED6	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8ED0 row 3 left byte: Spec256 - - - - - - 36 36
+808ED7	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8ED0 row 3 right byte: Spec256 36 36 - - - - - -
+808ED8	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8ED0 row 4 left byte: Spec256 - - 36 36 36 36 76 76
+808ED9	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8ED0 row 4 right byte: Spec256 76 76 36 36 36 36 - -
+808EDA	8000 8000 8000 8000 8000 8000 5F94 0000	; 8ED0 row 5 left byte: Spec256 - - - - - - 38 black
+808EDB	7F9F 5F94 8000 8000 8000 8000 8000 8000	; 8ED0 row 5 right byte: Spec256 7 38 - - - - - -
+808EDC	8000 8000 8000 8000 8000 8000 5F94 5F94	; 8ED0 row 6 left byte: Spec256 - - - - - - 38 38
+808EDD	5F94 5F94 8000 8000 8000 8000 8000 8000	; 8ED0 row 6 right byte: Spec256 38 38 - - - - - -
+808EDE	8000 8000 8000 8000 8000 8000 8000 5F94	; 8ED0 row 7 left byte: Spec256 - - - - - - - 38
+808EDF	5F94 8000 8000 8000 8000 8000 8000 8000	; 8ED0 row 7 right byte: Spec256 38 - - - - - - -
+808EE0	8000 8000 8000 8000 8000 777D 777D 777D	; 8ED0 row 8 left byte: Spec256 - - - - - shirt shirt shirt
+808EE1	777D 777D 8000 8000 8000 8000 8000 8000	; 8ED0 row 8 right byte: Spec256 shirt shirt - - - - - -
+808EE2	8000 8000 8000 8000 777D 777D 777D 777D	; 8ED0 row 9 left byte: Spec256 - - - - shirt shirt shirt shirt
+808EE3	0000 777D 777D 8000 8000 8000 8000 8000	; 8ED0 row 9 right byte: Spec256 black shirt shirt - - - - -
+808EE4	8000 8000 8000 8000 30D7 4979 0000 0000	; 8ED0 row 10 left byte: Spec256 - - - - 3 4 black black
+808EE5	777D 777D 777D 8000 8000 8000 8000 8000	; 8ED0 row 10 right byte: Spec256 shirt shirt shirt - - - - -
+808EE6	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8ED0 row 11 left byte: Spec256 - - - - - 3 3 3
+808EE7	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8ED0 row 11 right byte: Spec256 3 3 3 - - - - -
+808EE8	8000 8000 8000 8000 8000 8000 30D7 30D7	; 8ED0 row 12 left byte: Spec256 - - - - - - 3 3
+808EE9	30D7 30D7 8000 8000 8000 8000 8000 8000	; 8ED0 row 12 right byte: Spec256 3 3 - - - - - -
+808EEA	8000 8000 8000 8000 67A0 8000 67A0 8000	; 8ED0 row 13 left byte: Spec256 - - - - boot - boot -
+808EEB	8000 8000 67A0 8000 8000 8000 8000 8000	; 8ED0 row 13 right byte: Spec256 - - boot - - - - -
+808EEC	8000 8000 8000 8000 8000 67A0 8000 8000	; 8ED0 row 14 left byte: Spec256 - - - - - boot - -
+808EED	8000 67A0 8000 8000 8000 8000 8000 8000	; 8ED0 row 14 right byte: Spec256 - boot - - - - - -
+;
+; Frame at 8F90: Harry the farmer, arms-out frame 1 of 4 (inferred: climbing pose)
+; 8F90 ................
+; 8F92 ......#..#......
+; 8F94 ......####......
+; 8F96 ......####......
+; 8F98 ..############..
+; 8F9A ......####......
+; 8F9C ....#..##.......
+; 8F9E ...#.######.....
+; 8FA0 ...#########....
+; 8FA2 ....#########...
+; 8FA4 .....######.#...
+; 8FA6 .....######.#...
+; 8FA8 ......#..###....
+; 8FAA ......#.........
+; 8FAC ....###.........
+; 8FAE ................
+; (3 hole pixels closed on all sides, written as black)
+808F92	8000 8000 8000 8000 8000 8000 42EB 8000	; 8F90 row 1 left byte: Spec256 - - - - - - 36 -
+808F93	8000 42EB 8000 8000 8000 8000 8000 8000	; 8F90 row 1 right byte: Spec256 - 36 - - - - - -
+808F94	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8F90 row 2 left byte: Spec256 - - - - - - 36 36
+808F95	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8F90 row 2 right byte: Spec256 36 36 - - - - - -
+808F96	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8F90 row 3 left byte: Spec256 - - - - - - 36 36
+808F97	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8F90 row 3 right byte: Spec256 36 36 - - - - - -
+808F98	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8F90 row 4 left byte: Spec256 - - 36 36 36 36 76 (stripe) 76 (stripe)
+808F99	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8F90 row 4 right byte: Spec256 76 (stripe) 76 (stripe) 36 36 36 36 - -
+808F9A	8000 8000 8000 8000 8000 8000 67BB 67BB	; 8F90 row 5 left byte: Spec256 - - - - - - 46 46
+808F9B	67BB 67BB 8000 8000 8000 8000 8000 8000	; 8F90 row 5 right byte: Spec256 46 46 - - - - - -
+808F9C	8000 8000 8000 8000 67BB 8000 8000 67BB	; 8F90 row 6 left byte: Spec256 - - - - 46 - - 46
+808F9D	67BB 8000 8000 8000 8000 8000 8000 8000	; 8F90 row 6 right byte: Spec256 46 - - - - - - -
+808F9E	8000 8000 8000 777D 0000 777D 30D7 777D	; 8F90 row 7 left byte: Spec256 - - - shirt black shirt 3 shirt
+808F9F	777D 30D7 777D 8000 8000 8000 8000 8000	; 8F90 row 7 right byte: Spec256 shirt 3 shirt - - - - -
+808FA0	8000 8000 8000 777D 777D 777D 30D7 777D	; 8F90 row 8 left byte: Spec256 - - - shirt shirt shirt 3 shirt
+808FA1	777D 30D7 777D 777D 8000 8000 8000 8000	; 8F90 row 8 right byte: Spec256 shirt 3 shirt shirt - - - -
+808FA2	8000 8000 8000 8000 777D 777D 30D7 777D	; 8F90 row 9 left byte: Spec256 - - - - shirt shirt 3 shirt
+808FA3	777D 30D7 777D 777D 777D 8000 8000 8000	; 8F90 row 9 right byte: Spec256 shirt 3 shirt shirt shirt - - -
+808FA4	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8F90 row 10 left byte: Spec256 - - - - - 3 3 3
+808FA5	30D7 30D7 30D7 0000 777D 8000 8000 8000	; 8F90 row 10 right byte: Spec256 3 3 3 black shirt - - -
+808FA6	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8F90 row 11 left byte: Spec256 - - - - - 3 3 3
+808FA7	30D7 30D7 30D7 0000 777D 8000 8000 8000	; 8F90 row 11 right byte: Spec256 3 3 3 black shirt - - -
+808FA8	8000 8000 8000 8000 8000 8000 30D7 8000	; 8F90 row 12 left byte: Spec256 - - - - - - 3 -
+808FA9	8000 67A0 67A0 67A0 8000 8000 8000 8000	; 8F90 row 12 right byte: Spec256 - boot boot boot - - - -
+808FAA	8000 8000 8000 8000 8000 8000 30D7 8000	; 8F90 row 13 left byte: Spec256 - - - - - - 3 -
+808FAC	8000 8000 8000 8000 67A0 67A0 67A0 8000	; 8F90 row 14 left byte: Spec256 - - - - boot boot boot -
+;
+; Frame at 8FB0: Harry the farmer, arms-out frame 2 of 4 (inferred: climbing pose)
+; 8FB0 ................
+; 8FB2 ......#..#......
+; 8FB4 ......####......
+; 8FB6 ......####......
+; 8FB8 ..############..
+; 8FBA ......####......
+; 8FBC .......##.......
+; 8FBE .....######.....
+; 8FC0 ...##########...
+; 8FC2 ....########....
+; 8FC4 .....######.....
+; 8FC6 .....######.....
+; 8FC8 ......#..#......
+; 8FCA ....###..###....
+; 8FCC ................
+; 8FCE ................
+808FB2	8000 8000 8000 8000 8000 8000 42EB 8000	; 8FB0 row 1 left byte: Spec256 - - - - - - 36 -
+808FB3	8000 42EB 8000 8000 8000 8000 8000 8000	; 8FB0 row 1 right byte: Spec256 - 36 - - - - - -
+808FB4	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8FB0 row 2 left byte: Spec256 - - - - - - 36 36
+808FB5	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8FB0 row 2 right byte: Spec256 36 36 - - - - - -
+808FB6	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8FB0 row 3 left byte: Spec256 - - - - - - 36 36
+808FB7	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8FB0 row 3 right byte: Spec256 36 36 - - - - - -
+808FB8	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8FB0 row 4 left byte: Spec256 - - 36 36 36 36 76 (stripe) 76 (stripe)
+808FB9	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8FB0 row 4 right byte: Spec256 76 (stripe) 76 (stripe) 36 36 36 36 - -
+808FBA	8000 8000 8000 8000 8000 8000 67BB 67BB	; 8FB0 row 5 left byte: Spec256 - - - - - - 46 46
+808FBB	67BB 67BB 8000 8000 8000 8000 8000 8000	; 8FB0 row 5 right byte: Spec256 46 46 - - - - - -
+808FBC	8000 8000 8000 8000 8000 8000 8000 67BB	; 8FB0 row 6 left byte: Spec256 - - - - - - - 46
+808FBD	67BB 8000 8000 8000 8000 8000 8000 8000	; 8FB0 row 6 right byte: Spec256 46 - - - - - - -
+808FBE	8000 8000 8000 8000 8000 777D 30D7 777D	; 8FB0 row 7 left byte: Spec256 - - - - - shirt 3 shirt
+808FBF	777D 30D7 777D 8000 8000 8000 8000 8000	; 8FB0 row 7 right byte: Spec256 shirt 3 shirt - - - - -
+808FC0	8000 8000 8000 777D 777D 777D 30D7 777D	; 8FB0 row 8 left byte: Spec256 - - - shirt shirt shirt 3 shirt
+808FC1	777D 30D7 777D 777D 777D 8000 8000 8000	; 8FB0 row 8 right byte: Spec256 shirt 3 shirt shirt shirt - - -
+808FC2	8000 8000 8000 8000 777D 777D 30D7 777D	; 8FB0 row 9 left byte: Spec256 - - - - shirt shirt 3 shirt
+808FC3	777D 30D7 777D 777D 8000 8000 8000 8000	; 8FB0 row 9 right byte: Spec256 shirt 3 shirt shirt - - - -
+808FC4	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8FB0 row 10 left byte: Spec256 - - - - - 3 3 3
+808FC5	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8FB0 row 10 right byte: Spec256 3 3 3 - - - - -
+808FC6	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8FB0 row 11 left byte: Spec256 - - - - - 3 3 3
+808FC7	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8FB0 row 11 right byte: Spec256 3 3 3 - - - - -
+808FC8	8000 8000 8000 8000 8000 8000 30D7 8000	; 8FB0 row 12 left byte: Spec256 - - - - - - 3 -
+808FC9	8000 30D7 8000 8000 8000 8000 8000 8000	; 8FB0 row 12 right byte: Spec256 - 3 - - - - - -
+808FCA	8000 8000 8000 8000 67A0 67A0 67A0 8000	; 8FB0 row 13 left byte: Spec256 - - - - boot boot boot -
+808FCB	8000 67A0 67A0 67A0 8000 8000 8000 8000	; 8FB0 row 13 right byte: Spec256 - boot boot boot - - - -
+;
+; Frame at 8FD0: Harry the farmer, arms-out frame 3 of 4 (inferred: climbing pose)
+; 8FD0 ................
+; 8FD2 ......#..#......
+; 8FD4 ......####......
+; 8FD6 ......####......
+; 8FD8 ..############..
+; 8FDA ......####......
+; 8FDC .......##..#....
+; 8FDE .....######.#...
+; 8FE0 ....#########...
+; 8FE2 ...#########....
+; 8FE4 ...#.######.....
+; 8FE6 ...#.######.....
+; 8FE8 ....###..#......
+; 8FEA .........#......
+; 8FEC .........###....
+; 8FEE ................
+; (3 hole pixels closed on all sides, written as black)
+808FD2	8000 8000 8000 8000 8000 8000 42EB 8000	; 8FD0 row 1 left byte: Spec256 - - - - - - 36 -
+808FD3	8000 42EB 8000 8000 8000 8000 8000 8000	; 8FD0 row 1 right byte: Spec256 - 36 - - - - - -
+808FD4	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8FD0 row 2 left byte: Spec256 - - - - - - 36 36
+808FD5	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8FD0 row 2 right byte: Spec256 36 36 - - - - - -
+808FD6	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8FD0 row 3 left byte: Spec256 - - - - - - 36 36
+808FD7	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8FD0 row 3 right byte: Spec256 36 36 - - - - - -
+808FD8	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8FD0 row 4 left byte: Spec256 - - 36 36 36 36 76 (stripe) 76 (stripe)
+808FD9	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8FD0 row 4 right byte: Spec256 76 (stripe) 76 (stripe) 36 36 36 36 - -
+808FDA	8000 8000 8000 8000 8000 8000 67BB 67BB	; 8FD0 row 5 left byte: Spec256 - - - - - - 46 46
+808FDB	67BB 67BB 8000 8000 8000 8000 8000 8000	; 8FD0 row 5 right byte: Spec256 46 46 - - - - - -
+808FDC	8000 8000 8000 8000 8000 8000 8000 67BB	; 8FD0 row 6 left byte: Spec256 - - - - - - - 46
+808FDD	67BB 8000 8000 67BB 8000 8000 8000 8000	; 8FD0 row 6 right byte: Spec256 46 - - 46 - - - -
+808FDE	8000 8000 8000 8000 8000 777D 30D7 777D	; 8FD0 row 7 left byte: Spec256 - - - - - shirt 3 shirt
+808FDF	777D 30D7 777D 0000 777D 8000 8000 8000	; 8FD0 row 7 right byte: Spec256 shirt 3 shirt black shirt - - -
+808FE0	8000 8000 8000 8000 777D 777D 30D7 777D	; 8FD0 row 8 left byte: Spec256 - - - - shirt shirt 3 shirt
+808FE1	777D 30D7 777D 777D 777D 8000 8000 8000	; 8FD0 row 8 right byte: Spec256 shirt 3 shirt shirt shirt - - -
+808FE2	8000 8000 8000 777D 777D 777D 30D7 777D	; 8FD0 row 9 left byte: Spec256 - - - shirt shirt shirt 3 shirt
+808FE3	777D 30D7 777D 777D 8000 8000 8000 8000	; 8FD0 row 9 right byte: Spec256 shirt 3 shirt shirt - - - -
+808FE4	8000 8000 8000 777D 0000 30D7 30D7 30D7	; 8FD0 row 10 left byte: Spec256 - - - shirt black 3 3 3
+808FE5	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8FD0 row 10 right byte: Spec256 3 3 3 - - - - -
+808FE6	8000 8000 8000 777D 0000 30D7 30D7 30D7	; 8FD0 row 11 left byte: Spec256 - - - shirt black 3 3 3
+808FE7	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8FD0 row 11 right byte: Spec256 3 3 3 - - - - -
+808FE8	8000 8000 8000 8000 67A0 67A0 67A0 8000	; 8FD0 row 12 left byte: Spec256 - - - - boot boot boot -
+808FE9	8000 30D7 8000 8000 8000 8000 8000 8000	; 8FD0 row 12 right byte: Spec256 - 3 - - - - - -
+808FEB	8000 30D7 8000 8000 8000 8000 8000 8000	; 8FD0 row 13 right byte: Spec256 - 3 - - - - - -
+808FED	8000 67A0 67A0 67A0 8000 8000 8000 8000	; 8FD0 row 14 right byte: Spec256 - boot boot boot - - - -
+;
+; Frame at 8FF0: Harry the farmer, arms-out frame 4 of 4 (inferred: climbing pose)
+; 8FF0 ................
+; 8FF2 ......#..#......
+; 8FF4 ......####......
+; 8FF6 ......####......
+; 8FF8 ..############..
+; 8FFA ......####......
+; 8FFC .......##.......
+; 8FFE .....######.....
+; 9000 ...##########...
+; 9002 ....########....
+; 9004 .....######.....
+; 9006 .....######.....
+; 9008 ......#..#......
+; 900A ....###..###....
+; 900C ................
+; 900E ................
+808FF2	8000 8000 8000 8000 8000 8000 42EB 8000	; 8FF0 row 1 left byte: Spec256 - - - - - - 36 -
+808FF3	8000 42EB 8000 8000 8000 8000 8000 8000	; 8FF0 row 1 right byte: Spec256 - 36 - - - - - -
+808FF4	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8FF0 row 2 left byte: Spec256 - - - - - - 36 36
+808FF5	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8FF0 row 2 right byte: Spec256 36 36 - - - - - -
+808FF6	8000 8000 8000 8000 8000 8000 42EB 42EB	; 8FF0 row 3 left byte: Spec256 - - - - - - 36 36
+808FF7	42EB 42EB 8000 8000 8000 8000 8000 8000	; 8FF0 row 3 right byte: Spec256 36 36 - - - - - -
+808FF8	8000 8000 42EB 42EB 42EB 42EB 56B1 56B1	; 8FF0 row 4 left byte: Spec256 - - 36 36 36 36 76 (stripe) 76 (stripe)
+808FF9	56B1 56B1 42EB 42EB 42EB 42EB 8000 8000	; 8FF0 row 4 right byte: Spec256 76 (stripe) 76 (stripe) 36 36 36 36 - -
+808FFA	8000 8000 8000 8000 8000 8000 67BB 67BB	; 8FF0 row 5 left byte: Spec256 - - - - - - 46 46
+808FFB	67BB 67BB 8000 8000 8000 8000 8000 8000	; 8FF0 row 5 right byte: Spec256 46 46 - - - - - -
+808FFC	8000 8000 8000 8000 8000 8000 8000 67BB	; 8FF0 row 6 left byte: Spec256 - - - - - - - 46
+808FFD	67BB 8000 8000 8000 8000 8000 8000 8000	; 8FF0 row 6 right byte: Spec256 46 - - - - - - -
+808FFE	8000 8000 8000 8000 8000 777D 30D7 777D	; 8FF0 row 7 left byte: Spec256 - - - - - shirt 3 shirt
+808FFF	777D 30D7 777D 8000 8000 8000 8000 8000	; 8FF0 row 7 right byte: Spec256 shirt 3 shirt - - - - -
+809000	8000 8000 8000 777D 777D 777D 30D7 777D	; 8FF0 row 8 left byte: Spec256 - - - shirt shirt shirt 3 shirt
+809001	777D 30D7 777D 777D 777D 8000 8000 8000	; 8FF0 row 8 right byte: Spec256 shirt 3 shirt shirt shirt - - -
+809002	8000 8000 8000 8000 777D 777D 30D7 777D	; 8FF0 row 9 left byte: Spec256 - - - - shirt shirt 3 shirt
+809003	777D 30D7 777D 777D 8000 8000 8000 8000	; 8FF0 row 9 right byte: Spec256 shirt 3 shirt shirt - - - -
+809004	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8FF0 row 10 left byte: Spec256 - - - - - 3 3 3
+809005	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8FF0 row 10 right byte: Spec256 3 3 3 - - - - -
+809006	8000 8000 8000 8000 8000 30D7 30D7 30D7	; 8FF0 row 11 left byte: Spec256 - - - - - 3 3 3
+809007	30D7 30D7 30D7 8000 8000 8000 8000 8000	; 8FF0 row 11 right byte: Spec256 3 3 3 - - - - -
+809008	8000 8000 8000 8000 8000 8000 30D7 8000	; 8FF0 row 12 left byte: Spec256 - - - - - - 3 -
+809009	8000 30D7 8000 8000 8000 8000 8000 8000	; 8FF0 row 12 right byte: Spec256 - 3 - - - - - -
+80900A	8000 8000 8000 8000 67A0 67A0 67A0 8000	; 8FF0 row 13 left byte: Spec256 - - - - boot boot boot -
+80900B	8000 67A0 67A0 67A0 8000 8000 8000 8000	; 8FF0 row 13 right byte: Spec256 - boot boot boot - - - -
+;
+; THE BIG DUCK in the cage. Four frames (8EF0-8F6F) drawn by the same sprite routine as Harry, so they use the
+; same colour words: every pixel has its Spec256 colour (yellows, white eye, orange beak), and a hole closed on
+; all sides is black. It stays yellow whatever colour the cage has. Each frame also has a wing line made of clear
+; pixels that chuckie.gfx colours gold, 69=E3A200 and 70=EFCE00; they are painted too, so nothing behind the duck
+; shows through the wing (to make the wing line white, put 7FFF in those words instead).
+;
+; Duck frame 1 of 4 at 8EF0
+; 8EF0 .........####..#
+; 8EF2 ........###.###.
+; 8EF4 ........######..
+; 8EF6 ........#####.#.
+; 8EF8 .........###...#
+; 8EFA .........###....
+; 8EFC ..........##....
+; 8EFE ..........###...
+; 8F00 ...####....###..
+; 8F02 .########..###..
+; 8F04 ##############..
+; 8F06 #.######.#####..
+; 8F08 .#..####.####...
+; 8F0A .###....####....
+; 8F0C ..#########.....
+; 8F0E ....#####.......
+; (10 hole pixels closed on all sides, written as black)
+808EF1	8000 7FE0 7FE0 7FE0 7FE0 8000 8000 5380	; 8EF0 row 0 right byte: Spec256 - 71 71 71 71 - - 69
+808EF3	7FE0 7FE0 7FFF 0000 7FE0 5380 5380 8000	; 8EF0 row 1 right byte: Spec256 71 71 47 black 71 69 69 -
+808EF5	7FE0 7FE0 6F7B 6F7B 67A0 5380 8000 8000	; 8EF0 row 2 right byte: Spec256 71 71 86 86 70 69 - -
+808EF7	7FE0 7FE0 67A0 67A0 7FE0 8000 5380 8000	; 8EF0 row 3 right byte: Spec256 71 71 70 70 71 - 69 -
+808EF9	8000 7FE0 7FE0 7FE0 8000 8000 8000 5380	; 8EF0 row 4 right byte: Spec256 - 71 71 71 - - - 69
+808EFB	8000 7FE0 7FE0 7FE0 8000 8000 8000 8000	; 8EF0 row 5 right byte: Spec256 - 71 71 71 - - - -
+808EFD	8000 8000 7FE0 7FE0 8000 8000 8000 8000	; 8EF0 row 6 right byte: Spec256 - - 71 71 - - - -
+808EFF	8000 8000 7FE0 7FE0 7FE0 8000 8000 8000	; 8EF0 row 7 right byte: Spec256 - - 71 71 71 - - -
+808F00	8000 8000 8000 7FE0 7FE0 7FE0 7FE0 8000	; 8EF0 row 8 left byte: Spec256 - - - 71 71 71 71 -
+808F01	8000 8000 8000 7FE0 7FE0 7FE0 8000 8000	; 8EF0 row 8 right byte: Spec256 - - - 71 71 71 - -
+808F02	8000 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8EF0 row 9 left byte: Spec256 - 71 71 71 71 71 71 71
+808F03	7FE0 8000 8000 7FE0 7FE0 7FE0 8000 8000	; 8EF0 row 9 right byte: Spec256 71 - - 71 71 71 - -
+808F04	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8EF0 row 10 left byte: Spec256 71 71 71 71 71 71 71 71
+808F05	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 8000 8000	; 8EF0 row 10 right byte: Spec256 71 71 71 71 71 71 - -
+808F06	7FE0 5380 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8EF0 row 11 left byte: Spec256 71 69 (wing line) 71 71 71 71 71 71
+808F07	5380 7FE0 7FE0 7FE0 7FE0 7FE0 8000 8000	; 8EF0 row 11 right byte: Spec256 69 (wing line) 71 71 71 71 71 - -
+808F08	8000 7FE0 67A0 67A0 7FE0 7FE0 7FE0 7FE0	; 8EF0 row 12 left byte: Spec256 - 71 70 (wing line) 70 (wing line) 71 71 71 71
+808F09	5380 7FE0 7FE0 7FE0 7FE0 8000 8000 8000	; 8EF0 row 12 right byte: Spec256 69 (wing line) 71 71 71 71 - - -
+808F0A	8000 7FE0 7FE0 7FE0 67A0 5380 5380 67A0	; 8EF0 row 13 left byte: Spec256 - 71 71 71 70 (wing line) 69 (wing line) 69 (wing line) 70 (wing line)
+808F0B	7FE0 7FE0 7FE0 7FE0 8000 8000 8000 8000	; 8EF0 row 13 right byte: Spec256 71 71 71 71 - - - -
+808F0C	8000 8000 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8EF0 row 14 left byte: Spec256 - - 71 71 71 71 71 71
+808F0D	7FE0 7FE0 7FE0 8000 8000 8000 8000 8000	; 8EF0 row 14 right byte: Spec256 71 71 71 - - - - -
+808F0E	8000 8000 8000 8000 7FE0 7FE0 7FE0 7FE0	; 8EF0 row 15 left byte: Spec256 - - - - 71 71 71 71
+808F0F	7FE0 8000 8000 8000 8000 8000 8000 8000	; 8EF0 row 15 right byte: Spec256 71 - - - - - - -
+;
+; Duck frame 2 of 4 at 8F10
+; 8F10 .........####...
+; 8F12 ........###.##..
+; 8F14 ........########
+; 8F16 ........#####...
+; 8F18 .........###....
+; 8F1A .........###....
+; 8F1C ..........##....
+; 8F1E ..........###...
+; 8F20 ...####....###..
+; 8F22 .###....#..###..
+; 8F24 ##..####.#####..
+; 8F26 #.######.#####..
+; 8F28 .############...
+; 8F2A .###########....
+; 8F2C ..#########.....
+; 8F2E ....#####.......
+; (6 hole pixels closed on all sides, written as black)
+808F11	8000 67A0 7FE0 7FE0 67A0 8000 8000 8000	; 8F10 row 0 right byte: Spec256 - 70 71 71 70 - - -
+808F13	67A0 7FE0 7FFF 0000 67A0 5380 8000 8000	; 8F10 row 1 right byte: Spec256 70 71 47 black 70 69 - -
+808F15	7FE0 67A0 6F7B 6F7B 67A0 5380 5380 5380	; 8F10 row 2 right byte: Spec256 71 70 86 86 70 69 69 69
+808F17	67A0 7FE0 67A0 67A0 67A0 8000 8000 8000	; 8F10 row 3 right byte: Spec256 70 71 70 70 70 - - -
+808F19	8000 7FE0 7FE0 7FE0 8000 8000 8000 8000	; 8F10 row 4 right byte: Spec256 - 71 71 71 - - - -
+808F1B	8000 67A0 7FE0 7FE0 8000 8000 8000 8000	; 8F10 row 5 right byte: Spec256 - 70 71 71 - - - -
+808F1D	8000 8000 7FE0 7FE0 8000 8000 8000 8000	; 8F10 row 6 right byte: Spec256 - - 71 71 - - - -
+808F1F	8000 8000 67A0 7FE0 67A0 8000 8000 8000	; 8F10 row 7 right byte: Spec256 - - 70 71 70 - - -
+808F20	8000 8000 8000 67A0 7FE0 7FE0 67A0 8000	; 8F10 row 8 left byte: Spec256 - - - 70 71 71 70 -
+808F21	8000 8000 8000 7FE0 7FE0 67A0 8000 8000	; 8F10 row 8 right byte: Spec256 - - - 71 71 70 - -
+808F22	8000 67A0 7FE0 7FE0 67A0 5380 5380 67A0	; 8F10 row 9 left byte: Spec256 - 70 71 71 70 (wing line) 69 (wing line) 69 (wing line) 70 (wing line)
+808F23	7FE0 8000 8000 7FE0 7FE0 67A0 8000 8000	; 8F10 row 9 right byte: Spec256 71 - - 71 71 70 - -
+808F24	67A0 7FE0 5380 67A0 7FE0 7FE0 7FE0 7FE0	; 8F10 row 10 left byte: Spec256 70 71 69 (wing line) 70 (wing line) 71 71 71 71
+808F25	67A0 7FE0 7FE0 7FE0 7FE0 67A0 8000 8000	; 8F10 row 10 right byte: Spec256 70 (wing line) 71 71 71 71 70 - -
+808F26	7FE0 5380 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8F10 row 11 left byte: Spec256 71 69 (wing line) 71 71 71 71 71 71
+808F27	5380 7FE0 7FE0 7FE0 7FE0 67A0 8000 8000	; 8F10 row 11 right byte: Spec256 69 (wing line) 71 71 71 71 70 - -
+808F28	8000 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8F10 row 12 left byte: Spec256 - 71 71 71 71 71 71 71
+808F29	7FE0 7FE0 7FE0 7FE0 67A0 8000 8000 8000	; 8F10 row 12 right byte: Spec256 71 71 71 71 70 - - -
+808F2A	8000 67A0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8F10 row 13 left byte: Spec256 - 70 71 71 71 71 71 71
+808F2B	7FE0 7FE0 7FE0 67A0 8000 8000 8000 8000	; 8F10 row 13 right byte: Spec256 71 71 71 70 - - - -
+808F2C	8000 8000 67A0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8F10 row 14 left byte: Spec256 - - 70 71 71 71 71 71
+808F2D	7FE0 7FE0 67A0 8000 8000 8000 8000 8000	; 8F10 row 14 right byte: Spec256 71 71 70 - - - - -
+808F2E	8000 8000 8000 8000 67A0 7FE0 7FE0 7FE0	; 8F10 row 15 left byte: Spec256 - - - - 70 71 71 71
+808F2F	67A0 8000 8000 8000 8000 8000 8000 8000	; 8F10 row 15 right byte: Spec256 70 - - - - - - -
+;
+; Duck frame 3 of 4 at 8F30
+; 8F30 #..####.........
+; 8F32 .###.###........
+; 8F34 ..######........
+; 8F36 .#.#####........
+; 8F38 #...###.........
+; 8F3A ....###.........
+; 8F3C ....##..........
+; 8F3E ...###..........
+; 8F40 ..###....####...
+; 8F42 ..###..########.
+; 8F44 ..##############
+; 8F46 ..#####.######.#
+; 8F48 ...####.####..#.
+; 8F4A ....####....###.
+; 8F4C .....#########..
+; 8F4E .......#####....
+; (10 hole pixels closed on all sides, written as black)
+808F30	5380 8000 8000 67A0 7FE0 7FE0 67A0 8000	; 8F30 row 0 left byte: Spec256 69 - - 70 71 71 70 -
+808F32	8000 5380 5380 7FE0 0000 7FFF 67A0 7FE0	; 8F30 row 1 left byte: Spec256 - 69 69 71 black 47 70 71
+808F34	8000 8000 5380 67A0 6F7B 6F7B 67A0 7FE0	; 8F30 row 2 left byte: Spec256 - - 69 70 86 86 70 71
+808F36	8000 5380 8000 67A0 67A0 67A0 7FE0 7FE0	; 8F30 row 3 left byte: Spec256 - 69 - 70 70 70 71 71
+808F38	5380 8000 8000 8000 7FE0 7FE0 7FE0 8000	; 8F30 row 4 left byte: Spec256 69 - - - 71 71 71 -
+808F3A	8000 8000 8000 8000 7FE0 7FE0 7FE0 8000	; 8F30 row 5 left byte: Spec256 - - - - 71 71 71 -
+808F3C	8000 8000 8000 8000 7FE0 7FE0 8000 8000	; 8F30 row 6 left byte: Spec256 - - - - 71 71 - -
+808F3E	8000 8000 8000 67A0 7FE0 7FE0 8000 8000	; 8F30 row 7 left byte: Spec256 - - - 70 71 71 - -
+808F40	8000 8000 67A0 7FE0 7FE0 8000 8000 8000	; 8F30 row 8 left byte: Spec256 - - 70 71 71 - - -
+808F41	8000 67A0 7FE0 7FE0 67A0 8000 8000 8000	; 8F30 row 8 right byte: Spec256 - 70 71 71 70 - - -
+808F42	8000 8000 7FE0 7FE0 7FE0 8000 8000 67A0	; 8F30 row 9 left byte: Spec256 - - 71 71 71 - - 70
+808F43	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 67A0 8000	; 8F30 row 9 right byte: Spec256 71 71 71 71 71 71 70 -
+808F44	8000 8000 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0	; 8F30 row 10 left byte: Spec256 - - 71 71 71 71 71 71
+808F45	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 67A0	; 8F30 row 10 right byte: Spec256 71 71 71 71 71 71 71 70
+808F46	8000 8000 67A0 7FE0 7FE0 7FE0 7FE0 5380	; 8F30 row 11 left byte: Spec256 - - 70 71 71 71 71 69 (wing line)
+808F47	7FE0 7FE0 7FE0 7FE0 7FE0 67A0 67A0 7FE0	; 8F30 row 11 right byte: Spec256 71 71 71 71 71 70 70 (wing line) 71
+808F48	8000 8000 8000 67A0 7FE0 7FE0 7FE0 67A0	; 8F30 row 12 left byte: Spec256 - - - 70 71 71 71 70 (wing line)
+808F49	7FE0 7FE0 7FE0 7FE0 67A0 67A0 7FE0 8000	; 8F30 row 12 right byte: Spec256 71 71 71 71 70 (wing line) 70 (wing line) 71 -
+808F4A	8000 8000 8000 8000 67A0 7FE0 7FE0 7FE0	; 8F30 row 13 left byte: Spec256 - - - - 70 71 71 71
+808F4B	67A0 5380 5380 67A0 7FE0 7FE0 67A0 8000	; 8F30 row 13 right byte: Spec256 70 (wing line) 69 (wing line) 69 (wing line) 70 (wing line) 71 71 70 -
+808F4C	8000 8000 8000 8000 8000 67A0 7FE0 7FE0	; 8F30 row 14 left byte: Spec256 - - - - - 70 71 71
+808F4D	7FE0 7FE0 7FE0 7FE0 7FE0 67A0 8000 8000	; 8F30 row 14 right byte: Spec256 71 71 71 71 71 70 - -
+808F4E	8000 8000 8000 8000 8000 8000 8000 67A0	; 8F30 row 15 left byte: Spec256 - - - - - - - 70
+808F4F	7FE0 7FE0 7FE0 67A0 8000 8000 8000 8000	; 8F30 row 15 right byte: Spec256 71 71 71 70 - - - -
+;
+; Duck frame 4 of 4 at 8F50
+; 8F50 ...####.........
+; 8F52 ..##.###........
+; 8F54 ########........
+; 8F56 ...#####........
+; 8F58 ....###.........
+; 8F5A ....###.........
+; 8F5C ....##..........
+; 8F5E ...###..........
+; 8F60 ..###....####...
+; 8F62 ..###..#....###.
+; 8F64 ..#####.####..##
+; 8F66 ..#####.######.#
+; 8F68 ...############.
+; 8F6A ....###########.
+; 8F6C .....#########..
+; 8F6E .......#####....
+; (6 hole pixels closed on all sides, written as black)
+808F50	8000 8000 8000 67A0 7FE0 7FE0 67A0 8000	; 8F50 row 0 left byte: Spec256 - - - 70 71 71 70 -
+808F52	8000 8000 5380 7FE0 0000 7FFF 67A0 67A0	; 8F50 row 1 left byte: Spec256 - - 69 71 black 47 70 70
+808F54	5380 5380 5380 7FE0 6F7B 6F7B 67A0 7FE0	; 8F50 row 2 left byte: Spec256 69 69 69 71 86 86 70 71
+808F56	8000 8000 8000 7FE0 67A0 67A0 7FE0 67A0	; 8F50 row 3 left byte: Spec256 - - - 71 70 70 71 70
+808F58	8000 8000 8000 8000 7FE0 7FE0 7FE0 8000	; 8F50 row 4 left byte: Spec256 - - - - 71 71 71 -
+808F5A	8000 8000 8000 8000 7FE0 7FE0 67A0 8000	; 8F50 row 5 left byte: Spec256 - - - - 71 71 70 -
+808F5C	8000 8000 8000 8000 7FE0 7FE0 8000 8000	; 8F50 row 6 left byte: Spec256 - - - - 71 71 - -
+808F5E	8000 8000 8000 67A0 7FE0 67A0 8000 8000	; 8F50 row 7 left byte: Spec256 - - - 70 71 70 - -
+808F60	8000 8000 67A0 7FE0 7FE0 8000 8000 8000	; 8F50 row 8 left byte: Spec256 - - 70 71 71 - - -
+808F61	8000 67A0 7FE0 7FE0 67A0 8000 8000 8000	; 8F50 row 8 right byte: Spec256 - 70 71 71 70 - - -
+808F62	8000 8000 7FE0 7FE0 7FE0 8000 8000 7FE0	; 8F50 row 9 left byte: Spec256 - - 71 71 71 - - 71
+808F63	67A0 5380 5380 67A0 7FE0 7FE0 67A0 8000	; 8F50 row 9 right byte: Spec256 70 (wing line) 69 (wing line) 69 (wing line) 70 (wing line) 71 71 70 -
+808F64	8000 8000 7FE0 7FE0 7FE0 7FE0 7FE0 67A0	; 8F50 row 10 left byte: Spec256 - - 71 71 71 71 71 70 (wing line)
+808F65	7FE0 7FE0 7FE0 7FE0 67A0 67A0 7FE0 67A0	; 8F50 row 10 right byte: Spec256 71 71 71 71 70 (wing line) 70 (wing line) 71 70
+808F66	8000 8000 67A0 7FE0 7FE0 7FE0 7FE0 67A0	; 8F50 row 11 left byte: Spec256 - - 70 71 71 71 71 70 (wing line)
+808F67	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 67A0 7FE0	; 8F50 row 11 right byte: Spec256 71 71 71 71 71 71 70 (wing line) 71
+808F68	8000 8000 8000 67A0 7FE0 7FE0 7FE0 7FE0	; 8F50 row 12 left byte: Spec256 - - - 70 71 71 71 71
+808F69	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 8000	; 8F50 row 12 right byte: Spec256 71 71 71 71 71 71 71 -
+808F6A	8000 8000 8000 8000 67A0 7FE0 7FE0 7FE0	; 8F50 row 13 left byte: Spec256 - - - - 70 71 71 71
+808F6B	7FE0 7FE0 7FE0 7FE0 7FE0 7FE0 67A0 8000	; 8F50 row 13 right byte: Spec256 71 71 71 71 71 71 70 -
+808F6C	8000 8000 8000 8000 8000 67A0 7FE0 7FE0	; 8F50 row 14 left byte: Spec256 - - - - - 70 71 71
+808F6D	7FE0 7FE0 7FE0 7FE0 7FE0 67A0 8000 8000	; 8F50 row 14 right byte: Spec256 71 71 71 71 71 70 - -
+808F6E	8000 8000 8000 8000 8000 8000 8000 67A0	; 8F50 row 15 left byte: Spec256 - - - - - - - 70
+808F6F	7FE0 7FE0 7FE0 67A0 8000 8000 8000 8000	; 8F50 row 15 right byte: Spec256 71 71 71 70 - - - -
+;
+; THE CAGE. The map at 61A8 draws it from 14 tiles of the tile table, numbers 168-181 (8A30-8A9F): 168-169 are
+; the ring on top, 170-173 the dome, 174-177 the bars and 178-181 the base. Spec256 colours it gold:
+;   68=D77900 (dark)  69=E3A200 (mid)  70=EFCE00 (light)  255=ring (DFDF7F, white mixed with the yellow ink)
+; Mr. Telmo asked for silver, so the same shades are replaced by Spec256's greys (dark to light):
+;   68->9E9E9E  69->BABABA  70->DBDBDB  ring->DBDBDB
+; To get the gold back, use the four gold colours above in place of the greys.
+;
+; Tile 168 at 8A30
+; 8A30 ........
+; 8A31 ........
+; 8A32 .....###
+; 8A33 ....##..
+; 8A34 ....#...
+; 8A35 ....##..
+; 8A36 .....###
+; 8A37 .......#
+808A32	8000 8000 8000 8000 8000 6F7B 6F7B 6F7B	; tile 168 row 2: Spec256 - - - - - 255 255 255
+808A33	8000 8000 8000 8000 6F7B 6F7B 8000 8000	; tile 168 row 3: Spec256 - - - - 255 255 - -
+808A34	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 168 row 4: Spec256 - - - - 255 - - -
+808A35	8000 8000 8000 8000 6F7B 6F7B 8000 8000	; tile 168 row 5: Spec256 - - - - 255 255 - -
+808A36	8000 8000 8000 8000 8000 6F7B 6F7B 6F7B	; tile 168 row 6: Spec256 - - - - - 255 255 255
+808A37	8000 8000 8000 8000 8000 8000 8000 6F7B	; tile 168 row 7: Spec256 - - - - - - - 255
+;
+; Tile 169 at 8A38
+; 8A38 ........
+; 8A39 ........
+; 8A3A ##......
+; 8A3B .##.....
+; 8A3C ..#.....
+; 8A3D .##.....
+; 8A3E ##......
+; 8A3F ........
+808A3A	6F7B 6F7B 8000 8000 8000 8000 8000 8000	; tile 169 row 2: Spec256 255 255 - - - - - -
+808A3B	8000 6F7B 6F7B 8000 8000 8000 8000 8000	; tile 169 row 3: Spec256 - 255 255 - - - - -
+808A3C	8000 8000 6F7B 8000 8000 8000 8000 8000	; tile 169 row 4: Spec256 - - 255 - - - - -
+808A3D	8000 6F7B 6F7B 8000 8000 8000 8000 8000	; tile 169 row 5: Spec256 - 255 255 - - - - -
+808A3E	6F7B 6F7B 8000 8000 8000 8000 8000 8000	; tile 169 row 6: Spec256 255 255 - - - - - -
+;
+; Tile 170 at 8A40
+; 8A40 ........
+; 8A41 ........
+; 8A42 ......##
+; 8A43 .....#.#
+; 8A44 ....#.#.
+; 8A45 ...#.#.#
+; 8A46 ..#.#..#
+; 8A47 ..#.#.#.
+808A42	8000 8000 8000 8000 8000 8000 4E73 5EF7	; tile 170 row 2: Spec256 - - - - - - 68 69
+808A43	8000 8000 8000 8000 8000 4E73 8000 4E73	; tile 170 row 3: Spec256 - - - - - 68 - 68
+808A44	8000 8000 8000 8000 5EF7 8000 4E73 8000	; tile 170 row 4: Spec256 - - - - 69 - 68 -
+808A45	8000 8000 8000 5EF7 8000 5EF7 8000 5EF7	; tile 170 row 5: Spec256 - - - 69 - 69 - 69
+808A46	8000 8000 4E73 8000 5EF7 8000 8000 4E73	; tile 170 row 6: Spec256 - - 68 - 69 - - 68
+808A47	8000 8000 4E73 8000 5EF7 8000 4E73 8000	; tile 170 row 7: Spec256 - - 68 - 69 - 68 -
+;
+; Tile 171 at 8A48
+; 8A48 ...#####
+; 8A49 ###.....
+; 8A4A ...##...
+; 8A4B .##..###
+; 8A4C #...#..#
+; 8A4D ...#...#
+; 8A4E ...#...#
+; 8A4F ..#....#
+808A48	8000 8000 8000 5EF7 5EF7 5EF7 5EF7 5EF7	; tile 171 row 0: Spec256 - - - 69 69 69 69 69
+808A49	5EF7 5EF7 5EF7 8000 8000 8000 8000 8000	; tile 171 row 1: Spec256 69 69 69 - - - - -
+808A4A	8000 8000 8000 5EF7 5EF7 8000 8000 8000	; tile 171 row 2: Spec256 - - - 69 69 - - -
+808A4B	8000 6F7B 4E73 8000 8000 4E73 5EF7 6F7B	; tile 171 row 3: Spec256 - 70 68 - - 68 69 70
+808A4C	6F7B 8000 8000 8000 4E73 8000 8000 6F7B	; tile 171 row 4: Spec256 70 - - - 68 - - 70
+808A4D	8000 8000 8000 5EF7 8000 8000 8000 6F7B	; tile 171 row 5: Spec256 - - - 69 - - - 70
+808A4E	8000 8000 8000 4E73 8000 8000 8000 6F7B	; tile 171 row 6: Spec256 - - - 68 - - - 70
+808A4F	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 171 row 7: Spec256 - - 70 - - - - 70
+;
+; Tile 172 at 8A50
+; 8A50 ####....
+; 8A51 ....###.
+; 8A52 ..##...#
+; 8A53 ##..##..
+; 8A54 ..#...#.
+; 8A55 ...#...#
+; 8A56 ...#...#
+; 8A57 ....#...
+808A50	6F7B 6F7B 6F7B 4E73 8000 8000 8000 8000	; tile 172 row 0: Spec256 70 70 70 68 - - - -
+808A51	8000 8000 8000 8000 4E73 6F7B 4E73 8000	; tile 172 row 1: Spec256 - - - - 68 70 68 -
+808A52	8000 8000 4E73 4E73 8000 8000 8000 6F7B	; tile 172 row 2: Spec256 - - 68 68 - - - 70
+808A53	6F7B 4E73 8000 8000 6F7B 4E73 8000 8000	; tile 172 row 3: Spec256 70 68 - - 70 68 - -
+808A54	8000 8000 4E73 8000 8000 8000 4E73 8000	; tile 172 row 4: Spec256 - - 68 - - - 68 -
+808A55	8000 8000 8000 4E73 8000 8000 8000 4E73	; tile 172 row 5: Spec256 - - - 68 - - - 68
+808A56	8000 8000 8000 4E73 8000 8000 8000 6F7B	; tile 172 row 6: Spec256 - - - 68 - - - 70
+808A57	8000 8000 8000 8000 5EF7 8000 8000 8000	; tile 172 row 7: Spec256 - - - - 69 - - -
+;
+; Tile 173 at 8A58
+; 8A58 ........
+; 8A59 ........
+; 8A5A #.......
+; 8A5B .#......
+; 8A5C #.#.....
+; 8A5D .#.#....
+; 8A5E ..#.#...
+; 8A5F #.#.#...
+808A5A	6F7B 8000 8000 8000 8000 8000 8000 8000	; tile 173 row 2: Spec256 70 - - - - - - -
+808A5B	8000 5EF7 8000 8000 8000 8000 8000 8000	; tile 173 row 3: Spec256 - 69 - - - - - -
+808A5C	6F7B 8000 5EF7 8000 8000 8000 8000 8000	; tile 173 row 4: Spec256 70 - 69 - - - - -
+808A5D	8000 5EF7 8000 5EF7 8000 8000 8000 8000	; tile 173 row 5: Spec256 - 69 - 69 - - - -
+808A5E	8000 8000 6F7B 8000 6F7B 8000 8000 8000	; tile 173 row 6: Spec256 - - 70 - 70 - - -
+808A5F	5EF7 8000 5EF7 8000 5EF7 8000 8000 8000	; tile 173 row 7: Spec256 69 - 69 - 69 - - -
+;
+; Tile 174 at 8A60
+; 8A60 .#.#..#.
+; 8A61 .#.#..#.
+; 8A62 .#.#..#.
+; 8A63 .#.#..#.
+; 8A64 .###..#.
+; 8A65 .#.##.#.
+; 8A66 .#.#.###
+; 8A67 .#.#..#.
+808A60	8000 5EF7 8000 5EF7 8000 8000 5EF7 8000	; tile 174 row 0: Spec256 - 69 - 69 - - 69 -
+808A61	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 174 row 1: Spec256 - 70 - 70 - - 70 -
+808A62	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 174 row 2: Spec256 - 70 - 70 - - 70 -
+808A63	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 174 row 3: Spec256 - 70 - 70 - - 70 -
+808A64	8000 6F7B 5EF7 6F7B 8000 8000 6F7B 8000	; tile 174 row 4: Spec256 - 70 69 70 - - 70 -
+808A65	8000 6F7B 8000 6F7B 5EF7 8000 6F7B 8000	; tile 174 row 5: Spec256 - 70 - 70 69 - 70 -
+808A66	8000 6F7B 8000 6F7B 8000 5EF7 6F7B 5EF7	; tile 174 row 6: Spec256 - 70 - 70 - 69 70 69
+808A67	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 174 row 7: Spec256 - 70 - 70 - - 70 -
+;
+; Tile 175 at 8A68
+; 8A68 ..#....#
+; 8A69 ..#....#
+; 8A6A ..#....#
+; 8A6B ..#....#
+; 8A6C ..#....#
+; 8A6D ..#....#
+; 8A6E ..#....#
+; 8A6F ##.#####
+808A68	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 175 row 0: Spec256 - - 70 - - - - 70
+808A69	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 175 row 1: Spec256 - - 70 - - - - 70
+808A6A	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 175 row 2: Spec256 - - 70 - - - - 70
+808A6B	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 175 row 3: Spec256 - - 70 - - - - 70
+808A6C	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 175 row 4: Spec256 - - 70 - - - - 70
+808A6D	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 175 row 5: Spec256 - - 70 - - - - 70
+808A6E	8000 8000 5EF7 8000 8000 8000 8000 6F7B	; tile 175 row 6: Spec256 - - 69 - - - - 70
+808A6F	6F7B 5EF7 8000 5EF7 6F7B 6F7B 6F7B 6F7B	; tile 175 row 7: Spec256 70 69 - 69 70 70 70 70
+;
+; Tile 176 at 8A70
+; 8A70 ....#...
+; 8A71 ....#...
+; 8A72 ....#...
+; 8A73 ....#...
+; 8A74 ....#...
+; 8A75 ....#...
+; 8A76 ....#..#
+; 8A77 #######.
+808A70	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 176 row 0: Spec256 - - - - 70 - - -
+808A71	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 176 row 1: Spec256 - - - - 70 - - -
+808A72	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 176 row 2: Spec256 - - - - 70 - - -
+808A73	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 176 row 3: Spec256 - - - - 70 - - -
+808A74	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 176 row 4: Spec256 - - - - 70 - - -
+808A75	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 176 row 5: Spec256 - - - - 70 - - -
+808A76	8000 8000 8000 8000 6F7B 8000 8000 5EF7	; tile 176 row 6: Spec256 - - - - 70 - - 69
+808A77	6F7B 6F7B 6F7B 6F7B 6F7B 6F7B 5EF7 8000	; tile 176 row 7: Spec256 70 70 70 70 70 70 69 -
+;
+; Tile 177 at 8A78
+; 8A78 #..#.#..
+; 8A79 #..#.#..
+; 8A7A #..#.#..
+; 8A7B #..#.#..
+; 8A7C #..###..
+; 8A7D #.##.#..
+; 8A7E ##.#.#..
+; 8A7F #..#.#..
+808A78	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 177 row 0: Spec256 70 - - 70 - 70 - -
+808A79	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 177 row 1: Spec256 70 - - 70 - 70 - -
+808A7A	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 177 row 2: Spec256 70 - - 70 - 70 - -
+808A7B	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 177 row 3: Spec256 70 - - 70 - 70 - -
+808A7C	6F7B 8000 8000 6F7B 5EF7 6F7B 8000 8000	; tile 177 row 4: Spec256 70 - - 70 69 70 - -
+808A7D	6F7B 8000 5EF7 6F7B 8000 6F7B 8000 8000	; tile 177 row 5: Spec256 70 - 69 70 - 70 - -
+808A7E	6F7B 5EF7 8000 6F7B 8000 6F7B 8000 8000	; tile 177 row 6: Spec256 70 69 - 70 - 70 - -
+808A7F	6F7B 8000 8000 6F7B 8000 5EF7 8000 8000	; tile 177 row 7: Spec256 70 - - 70 - 69 - -
+;
+; Tile 178 at 8A80
+; 8A80 .#.#..#.
+; 8A81 .#.#..#.
+; 8A82 .#.#..#.
+; 8A83 .#.#..#.
+; 8A84 ..##..#.
+; 8A85 ....#.#.
+; 8A86 .....###
+; 8A87 ........
+808A80	8000 6F7B 8000 6F7B 8000 8000 5EF7 8000	; tile 178 row 0: Spec256 - 70 - 70 - - 69 -
+808A81	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 178 row 1: Spec256 - 70 - 70 - - 70 -
+808A82	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 178 row 2: Spec256 - 70 - 70 - - 70 -
+808A83	8000 6F7B 8000 6F7B 8000 8000 6F7B 8000	; tile 178 row 3: Spec256 - 70 - 70 - - 70 -
+808A84	8000 8000 5EF7 6F7B 8000 8000 6F7B 8000	; tile 178 row 4: Spec256 - - 69 70 - - 70 -
+808A85	8000 8000 8000 8000 5EF7 8000 6F7B 8000	; tile 178 row 5: Spec256 - - - - 69 - 70 -
+808A86	8000 8000 8000 8000 8000 5EF7 6F7B 6F7B	; tile 178 row 6: Spec256 - - - - - 69 70 70
+;
+; Tile 179 at 8A88
+; 8A88 ..#....#
+; 8A89 ..#....#
+; 8A8A ..#....#
+; 8A8B ..#....#
+; 8A8C ..#....#
+; 8A8D ..#....#
+; 8A8E ..#....#
+; 8A8F ########
+808A88	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 0: Spec256 - - 70 - - - - 70
+808A89	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 1: Spec256 - - 70 - - - - 70
+808A8A	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 2: Spec256 - - 70 - - - - 70
+808A8B	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 3: Spec256 - - 70 - - - - 70
+808A8C	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 4: Spec256 - - 70 - - - - 70
+808A8D	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 5: Spec256 - - 70 - - - - 70
+808A8E	8000 8000 6F7B 8000 8000 8000 8000 6F7B	; tile 179 row 6: Spec256 - - 70 - - - - 70
+808A8F	6F7B 6F7B 6F7B 6F7B 6F7B 6F7B 6F7B 6F7B	; tile 179 row 7: Spec256 70 70 70 70 70 70 70 70
+;
+; Tile 180 at 8A90
+; 8A90 ....#...
+; 8A91 ....#...
+; 8A92 ....#...
+; 8A93 ....#...
+; 8A94 ....#...
+; 8A95 ....#...
+; 8A96 ....#..#
+; 8A97 #######.
+808A90	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 180 row 0: Spec256 - - - - 70 - - -
+808A91	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 180 row 1: Spec256 - - - - 70 - - -
+808A92	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 180 row 2: Spec256 - - - - 70 - - -
+808A93	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 180 row 3: Spec256 - - - - 70 - - -
+808A94	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 180 row 4: Spec256 - - - - 70 - - -
+808A95	8000 8000 8000 8000 6F7B 8000 8000 8000	; tile 180 row 5: Spec256 - - - - 70 - - -
+808A96	8000 8000 8000 8000 6F7B 8000 8000 5EF7	; tile 180 row 6: Spec256 - - - - 70 - - 69
+808A97	6F7B 6F7B 6F7B 6F7B 6F7B 6F7B 5EF7 8000	; tile 180 row 7: Spec256 70 70 70 70 70 70 69 -
+;
+; Tile 181 at 8A98
+; 8A98 #..#.#..
+; 8A99 #..#.#..
+; 8A9A #..#.#..
+; 8A9B #..#.#..
+; 8A9C #..##...
+; 8A9D #.##....
+; 8A9E ##......
+; 8A9F ........
+808A98	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 181 row 0: Spec256 70 - - 70 - 70 - -
+808A99	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 181 row 1: Spec256 70 - - 70 - 70 - -
+808A9A	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 181 row 2: Spec256 70 - - 70 - 70 - -
+808A9B	6F7B 8000 8000 6F7B 8000 6F7B 8000 8000	; tile 181 row 3: Spec256 70 - - 70 - 70 - -
+808A9C	6F7B 8000 8000 6F7B 5EF7 8000 8000 8000	; tile 181 row 4: Spec256 70 - - 70 69 - - -
+808A9D	6F7B 8000 5EF7 6F7B 8000 8000 8000 8000	; tile 181 row 5: Spec256 70 - 69 70 - - - -
+808A9E	6F7B 5EF7 8000 8000 8000 8000 8000 8000	; tile 181 row 6: Spec256 70 69 - - - - - -
+;
+; Frame at 9010: hen (long neck, one leg), frame 1 of 8
+; 9010 ..##............
+; 9012 ##.#............
+; 9014 ..##............
+; 9016 ..#.............
+; 9018 .#..............
+; 901A .#..............
+; 901C ##..............
+; 901E ##..###.........
+; 9020 ########........
+; 9022 ########........
+; 9024 .#######........
+; 9026 ..#####.........
+; 9028 ....#...........
+; 902A ....#...........
+; 902C ....#...........
+; 902E ...##...........
+809010	8000 8000 9010 9010 8000 8000 8000 8000	; was FFFC 9010 8000: the tag as colour words, byte 30
+809011	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809012	9012 9012 8000 9010 8000 8000 8000 8000	; 9010 row 1 left byte, per pixel, Spec256 70=EFCE00 79=FFFFDB
+809013	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809014	8000 8000 9010 9010 8000 8000 8000 8000	; was FFFC 9010 8000: the tag as colour words, byte 30
+809015	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809016	8000 8000 9013 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 20
+809017	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809018	8000 9012 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 40
+809019	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80901A	8000 9011 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 40
+80901B	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80901C	9012 9011 8000 8000 8000 8000 8000 8000	; 9010 row 6 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80901D	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80901E	9011 9011 8000 8000 9012 9011 9012 8000	; 9010 row 7 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80901F	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809020	9011 9011 9011 9011 9011 9011 9011 9012	; 9010 row 8 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809021	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809022	9012 9011 9012 9011 9011 9011 9011 9011	; 9010 row 9 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809023	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809024	8000 9012 9011 9012 9012 9012 9011 9012	; 9010 row 10 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809025	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809026	8000 8000 9012 9011 9011 9011 9012 8000	; 9010 row 11 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809027	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809028	8000 8000 8000 8000 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 08
+809029	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80902A	8000 8000 8000 8000 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 08
+80902B	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80902C	8000 8000 8000 8000 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 08
+80902D	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80902E	8000 8000 8000 9013 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 18
+80902F	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+;
+; Frame at 9030: hen (long neck, one leg), frame 2 of 8
+; 9030 ....##..........
+; 9032 ....#.##........
+; 9034 ....##..........
+; 9036 .....#..........
+; 9038 ......#.........
+; 903A ......#.........
+; 903C ......##........
+; 903E .###..##........
+; 9040 ########........
+; 9042 ########........
+; 9044 #######.........
+; 9046 .#####..........
+; 9048 ...#............
+; 904A ...#............
+; 904C ...#............
+; 904E ...##...........
+809030	8000 8000 8000 8000 9010 9010 8000 8000	; was FFFC 9010 8000: the tag as colour words, byte 0C
+809031	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809032	8000 8000 8000 8000 9010 8000 9012 9012	; 9030 row 1 left byte, per pixel, Spec256 70=EFCE00 79=FFFFDB
+809033	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809034	8000 8000 8000 8000 9010 9010 8000 8000	; was FFFC 9010 8000: the tag as colour words, byte 0C
+809035	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809036	8000 8000 8000 8000 8000 9013 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 04
+809037	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809038	8000 8000 8000 8000 8000 8000 9012 8000	; was FFFC 9012 8000: the tag as colour words, byte 02
+809039	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80903A	8000 8000 8000 8000 8000 8000 9011 8000	; was FFFC 9011 8000: the tag as colour words, byte 02
+80903B	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80903C	8000 8000 8000 8000 8000 8000 9011 9012	; 9030 row 6 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80903D	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80903E	8000 9012 9011 9012 8000 8000 9011 9011	; 9030 row 7 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80903F	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809040	9012 9011 9011 9011 9011 9011 9011 9011	; 9030 row 8 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809041	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809042	9011 9011 9011 9011 9011 9012 9011 9012	; 9030 row 9 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809043	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809044	9012 9011 9012 9013 9012 9011 9012 8000	; 9030 row 10 left byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+809045	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809046	8000 9012 9011 9011 9011 9012 8000 8000	; 9030 row 11 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809047	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809048	8000 8000 8000 9013 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 10
+809049	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80904A	8000 8000 8000 9013 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 10
+80904B	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80904C	8000 8000 8000 9013 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 10
+80904D	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80904E	8000 8000 8000 9013 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 18
+80904F	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+;
+; Frame at 9050: hen (long neck, one leg), frame 3 of 8
+; 9050 .......##.......
+; 9052 ......####......
+; 9054 ......####......
+; 9056 .......##.......
+; 9058 .......##.......
+; 905A .......##.......
+; 905C .....######.....
+; 905E ....########....
+; 9060 ....########....
+; 9062 ....########....
+; 9064 .....######.....
+; 9066 ......#..#......
+; 9068 ......#..##.....
+; 906A ......#.........
+; 906C ......#.........
+; 906E .....##.........
+809050	8000 8000 8000 8000 8000 8000 8000 9012	; was FFFC 9012 8000: the tag as colour words, byte 01
+809051	9012 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 80
+809052	8000 8000 8000 8000 8000 8000 9011 9011	; was FFFC 9011 8000: the tag as colour words, byte 03
+809053	9011 9011 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte C0
+809054	8000 8000 8000 8000 8000 8000 9012 9011	; 9050 row 2 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809055	9011 9012 8000 8000 8000 8000 8000 8000	; 9050 row 2 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809056	8000 8000 8000 8000 8000 8000 8000 9011	; was FFFC 9011 8000: the tag as colour words, byte 01
+809057	9013 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 80
+809058	8000 8000 8000 8000 8000 8000 8000 9011	; was FFFC 9011 8000: the tag as colour words, byte 01
+809059	9013 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 80
+80905A	8000 8000 8000 8000 8000 8000 8000 9011	; was FFFC 9011 8000: the tag as colour words, byte 01
+80905B	9011 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 80
+80905C	8000 8000 8000 8000 8000 9012 9011 9011	; 9050 row 6 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80905D	9011 9011 9012 8000 8000 8000 8000 8000	; 9050 row 6 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80905E	8000 8000 8000 8000 9012 9011 9013 9011	; 9050 row 7 left byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+80905F	9011 9013 9011 9012 8000 8000 8000 8000	; 9050 row 7 right byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+809060	8000 8000 8000 8000 9011 9013 9011 9011	; 9050 row 8 left byte, per pixel, Spec256 69=E3A200 71=FFFF00
+809061	9011 9011 9013 9011 8000 8000 8000 8000	; 9050 row 8 right byte, per pixel, Spec256 69=E3A200 71=FFFF00
+809062	8000 8000 8000 8000 9012 9011 9011 9011	; 9050 row 9 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809063	9011 9011 9011 9012 8000 8000 8000 8000	; 9050 row 9 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809064	8000 8000 8000 8000 8000 9012 9011 9011	; 9050 row 10 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809065	9011 9011 9012 8000 8000 8000 8000 8000	; 9050 row 10 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809066	8000 8000 8000 8000 8000 8000 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 02
+809067	8000 9013 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 40
+809068	8000 8000 8000 8000 8000 8000 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 02
+809069	8000 9013 9013 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 60
+80906A	8000 8000 8000 8000 8000 8000 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 02
+80906B	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80906C	8000 8000 8000 8000 8000 8000 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 02
+80906D	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80906E	8000 8000 8000 8000 8000 9013 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 06
+80906F	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+;
+; Frame at 9070: hen (long neck, one leg), frame 4 of 8
+; 9070 .......##.......
+; 9072 ......####......
+; 9074 ......####......
+; 9076 .......##.......
+; 9078 .......##.......
+; 907A .......##.......
+; 907C .....######.....
+; 907E ....########....
+; 9080 ....########....
+; 9082 ....########....
+; 9084 .....######.....
+; 9086 ......#..#......
+; 9088 .....##..#......
+; 908A .........#......
+; 908C .........#......
+; 908E .........##.....
+809070	8000 8000 8000 8000 8000 8000 8000 9012	; was FFFC 9012 8000: the tag as colour words, byte 01
+809071	9012 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 80
+809072	8000 8000 8000 8000 8000 8000 9011 9011	; was FFFC 9011 8000: the tag as colour words, byte 03
+809073	9011 9011 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte C0
+809074	8000 8000 8000 8000 8000 8000 9012 9011	; 9070 row 2 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809075	9011 9012 8000 8000 8000 8000 8000 8000	; 9070 row 2 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809076	8000 8000 8000 8000 8000 8000 8000 9011	; was FFFC 9011 8000: the tag as colour words, byte 01
+809077	9012 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 80
+809078	8000 8000 8000 8000 8000 8000 8000 9011	; was FFFC 9011 8000: the tag as colour words, byte 01
+809079	9012 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 80
+80907A	8000 8000 8000 8000 8000 8000 8000 9011	; was FFFC 9011 8000: the tag as colour words, byte 01
+80907B	9011 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 80
+80907C	8000 8000 8000 8000 8000 9012 9013 9011	; 9070 row 6 left byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+80907D	9011 9013 9012 8000 8000 8000 8000 8000	; 9070 row 6 right byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+80907E	8000 8000 8000 8000 9012 9011 9013 9011	; 9070 row 7 left byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+80907F	9011 9013 9012 9012 8000 8000 8000 8000	; 9070 row 7 right byte, per pixel, Spec256 69=E3A200 70=EFCE00 71=FFFF00
+809080	8000 8000 8000 8000 9011 9013 9011 9011	; 9070 row 8 left byte, per pixel, Spec256 69=E3A200 71=FFFF00
+809081	9011 9011 9013 9011 8000 8000 8000 8000	; 9070 row 8 right byte, per pixel, Spec256 69=E3A200 71=FFFF00
+809082	8000 8000 8000 8000 9012 9011 9011 9011	; 9070 row 9 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809083	9011 9011 9011 9012 8000 8000 8000 8000	; 9070 row 9 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809084	8000 8000 8000 8000 8000 9012 9011 9011	; 9070 row 10 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809085	9011 9011 9012 8000 8000 8000 8000 8000	; 9070 row 10 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809086	8000 8000 8000 8000 8000 8000 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 02
+809087	8000 9013 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 40
+809088	8000 8000 8000 8000 8000 9013 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 06
+809089	8000 9013 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 40
+80908A	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80908B	8000 9013 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 40
+80908C	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80908D	8000 9013 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 40
+80908E	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+80908F	8000 9013 9013 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 60
+;
+; Frame at 9090: hen (long neck, one leg), frame 5 of 8
+; 9090 ....#.##........
+; 9092 .....#.#........
+; 9094 ....#.##........
+; 9096 ......#.........
+; 9098 .....#..........
+; 909A .....#..........
+; 909C ....##..........
+; 909E ....##..###.....
+; 90A0 ....########....
+; 90A2 ....########....
+; 90A4 .....#######....
+; 90A6 ......#####.....
+; 90A8 .......##.......
+; 90AA ....#.#..#......
+; 90AC .....#....#.....
+; 90AE .........#......
+809090	8000 8000 8000 8000 9013 8000 9010 9010	; 9090 row 0 left byte, per pixel, Spec256 69=E3A200 79=FFFFDB
+809091	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809092	8000 8000 8000 8000 8000 9013 8000 9010	; 9090 row 1 left byte, per pixel, Spec256 69=E3A200 79=FFFFDB
+809093	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809094	8000 8000 8000 8000 9013 8000 9013 9013	; was FFFC 9013 8000: the tag as colour words, byte 0B
+809095	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809096	8000 8000 8000 8000 8000 8000 9012 8000	; was FFFC 9012 8000: the tag as colour words, byte 02
+809097	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+809098	8000 8000 8000 8000 8000 9012 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 04
+809099	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80909A	8000 8000 8000 8000 8000 9011 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 04
+80909B	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80909C	8000 8000 8000 8000 9012 9011 8000 8000	; 9090 row 6 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80909D	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+80909E	8000 8000 8000 8000 9011 9011 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 0C
+80909F	9012 9011 9012 8000 8000 8000 8000 8000	; 9090 row 7 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A0	8000 8000 8000 8000 9011 9011 9011 9011	; was FFFC 9011 8000: the tag as colour words, byte 0F
+8090A1	9011 9011 9011 9012 8000 8000 8000 8000	; 9090 row 8 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A2	8000 8000 8000 8000 9012 9011 9012 9011	; 9090 row 9 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A3	9011 9011 9011 9011 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte F0
+8090A4	8000 8000 8000 8000 8000 9012 9011 9012	; 9090 row 10 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A5	9012 9012 9011 9012 8000 8000 8000 8000	; 9090 row 10 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A6	8000 8000 8000 8000 8000 8000 9012 9011	; 9090 row 11 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A7	9011 9011 9012 8000 8000 8000 8000 8000	; 9090 row 11 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090A8	8000 8000 8000 8000 8000 8000 8000 9012	; was FFFC 9012 8000: the tag as colour words, byte 01
+8090A9	9012 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 80
+8090AA	8000 8000 8000 8000 9013 8000 9013 8000	; was FFFC 9013 8000: the tag as colour words, byte 0A
+8090AB	8000 9013 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 40
+8090AC	8000 8000 8000 8000 8000 9013 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 04
+8090AD	8000 8000 9013 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 20
+8090AE	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+8090AF	8000 9011 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 40
+;
+; Frame at 90B0: hen (long neck, one leg), frame 6 of 8
+; 90B0 ........##.#....
+; 90B2 ........#.#.....
+; 90B4 ........##.#....
+; 90B6 .........#......
+; 90B8 ..........#.....
+; 90BA ..........#.....
+; 90BC ..........##....
+; 90BE .....###..##....
+; 90C0 ....########....
+; 90C2 ....########....
+; 90C4 ....#######.....
+; 90C6 .....#####......
+; 90C8 .......##.......
+; 90CA ......#..#.#....
+; 90CC .....#....#.....
+; 90CE ......#.........
+8090B0	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090B1	9010 9010 8000 9013 8000 8000 8000 8000	; 90B0 row 0 right byte, per pixel, Spec256 69=E3A200 79=FFFFDB
+8090B2	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090B3	9010 8000 9013 8000 8000 8000 8000 8000	; 90B0 row 1 right byte, per pixel, Spec256 69=E3A200 79=FFFFDB
+8090B4	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090B5	9013 9013 8000 9013 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte D0
+8090B6	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090B7	8000 9012 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 40
+8090B8	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090B9	8000 8000 9012 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 20
+8090BA	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090BB	8000 8000 9011 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 20
+8090BC	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090BD	8000 8000 9011 9012 8000 8000 8000 8000	; 90B0 row 6 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090BE	8000 8000 8000 8000 8000 9012 9011 9012	; 90B0 row 7 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090BF	8000 8000 9011 9011 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 30
+8090C0	8000 8000 8000 8000 9012 9011 9011 9011	; 90B0 row 8 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090C1	9011 9011 9011 9011 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte F0
+8090C2	8000 8000 8000 8000 9011 9011 9011 9011	; was FFFC 9011 8000: the tag as colour words, byte 0F
+8090C3	9011 9012 9011 9012 8000 8000 8000 8000	; 90B0 row 9 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090C4	8000 8000 8000 8000 9012 9011 9012 9012	; 90B0 row 10 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090C5	9012 9011 9012 8000 8000 8000 8000 8000	; 90B0 row 10 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090C6	8000 8000 8000 8000 8000 9012 9011 9011	; 90B0 row 11 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090C7	9011 9012 8000 8000 8000 8000 8000 8000	; 90B0 row 11 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090C8	8000 8000 8000 8000 8000 8000 8000 9012	; was FFFC 9012 8000: the tag as colour words, byte 01
+8090C9	9012 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 80
+8090CA	8000 8000 8000 8000 8000 8000 9012 8000	; was FFFC 9012 8000: the tag as colour words, byte 02
+8090CB	8000 9012 8000 9012 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 50
+8090CC	8000 8000 8000 8000 8000 9012 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 04
+8090CD	8000 8000 9012 8000 8000 8000 8000 8000	; was FFFC 9012 8000: the tag as colour words, byte 20
+8090CE	8000 8000 8000 8000 8000 8000 9012 8000	; was FFFC 9012 8000: the tag as colour words, byte 02
+8090CF	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 00
+;
+; Frame at 90D0: hen (long neck, one leg), frame 7 of 8
+; 90D0 ................
+; 90D2 ................
+; 90D4 ................
+; 90D6 ................
+; 90D8 ................
+; 90DA ................
+; 90DC .###............
+; 90DE .#.##......####.
+; 90E0 ..#..###########
+; 90E2 .#.#...#########
+; 90E4 .........#######
+; 90E6 ...#......#####.
+; 90E8 ..#.#.......#...
+; 90EA .#.#.#......#...
+; 90EC #.#.#.#.....#...
+; 90EE ...........##...
+8090E4	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090E6	8000 8000 8000 9011 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 10
+8090E7	8000 8000 9012 9011 9011 9011 9012 8000	; 90D0 row 11 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090E8	8000 8000 9011 8000 9011 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 28
+8090E9	8000 8000 8000 8000 9011 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 08
+8090EA	8000 9011 8000 9012 8000 9011 8000 8000	; 90D0 row 13 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+8090EB	8000 8000 8000 8000 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 08
+8090EC	9011 8000 9011 8000 9013 8000 9011 8000	; 90D0 row 14 left byte, per pixel, Spec256 69=E3A200 71=FFFF00
+8090ED	8000 8000 8000 8000 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 08
+8090EE	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+8090EF	8000 8000 8000 9013 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 18
+;
+; Frame at 90F0: hen (long neck, one leg), frame 8 of 8
+; 90F0 ................
+; 90F2 ................
+; 90F4 ................
+; 90F6 ................
+; 90F8 ................
+; 90FA ................
+; 90FC ............###.
+; 90FE .####......##.#.
+; 9100 ###########..#..
+; 9102 #########...#.#.
+; 9104 #######.........
+; 9106 .#####......#...
+; 9108 ...#.......#.#..
+; 910A ...#......#.#.#.
+; 910C ...#.....#.#.#.#
+; 910E ...##...........
+809104	9012 9011 9011 9011 9011 9011 9012 8000	; 90F0 row 10 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809106	8000 9012 9011 9011 9011 9012 8000 8000	; 90F0 row 11 left byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+809107	8000 8000 8000 8000 9011 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 08
+809108	8000 8000 8000 9011 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 10
+809109	8000 8000 8000 9011 8000 9011 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 14
+80910A	8000 8000 8000 9013 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 10
+80910B	8000 8000 9011 8000 9012 8000 9011 8000	; 90F0 row 13 right byte, per pixel, Spec256 70=EFCE00 71=FFFF00
+80910C	8000 8000 8000 9013 8000 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 10
+80910D	8000 9011 8000 9011 8000 9013 8000 9011	; 90F0 row 14 right byte, per pixel, Spec256 69=E3A200 71=FFFF00
+80910E	8000 8000 8000 9013 9013 8000 8000 8000	; was FFFC 9013 8000: the tag as colour words, byte 18
+80910F	8000 8000 8000 8000 8000 8000 8000 8000	; was FFFC 9011 8000: the tag as colour words, byte 00
+;
+; Corn pile. Tile 4 of the tile table (84F0 + 8 * 4 = 8510) holds the pile in its rows 3-6, bytes 8513-8516.
+; In chuckie.gfx the pile is two yellows, 70=EFCE00 and 71=FFFF00, and the pixels between the dots are coloured
+; too (Spec256 draws a filled triangle), so each pixel gets a colour word: Spec256 index 0 is no colour and
+; stays 8000 (the Spectrum paper colour). One byte per line, leftmost pixel first.
+; Pile bitmap (set bits), one byte per line:
+; 8513 ...#....
+; 8514 ..#.#...
+; 8515 .#.#.#..
+; 8516 #.#.#.#.
+808513	8000 8000 8000 67A0 8000 8000 8000 8000	; pile row 3: ...a....  (a=70 EFCE00, b=71 FFFF00)
+808514	8000 8000 67A0 7FE0 67A0 8000 8000 8000	; pile row 4: ..aba...  (a=70 EFCE00, b=71 FFFF00)
+808515	8000 67A0 7FE0 67A0 7FE0 67A0 8000 8000	; pile row 5: .ababa..  (a=70 EFCE00, b=71 FFFF00)
+808516	67A0 7FE0 7FE0 67A0 67A0 67A0 67A0 8000	; pile row 6: abbaaaa.  (a=70 EFCE00, b=71 FFFF00)
+;
+; Egg. Tile 3 of the tile table (84F0 + 8 * 3 = 8508) holds the egg in 7 rows, bytes 8508-850E (850F is blank).
+; The egg is drawn by the same tile loops as the corn pile, so the commands added above carry its colours.
+; In chuckie.gfx every pixel of the egg has its own shade, from 74=797959 (dark edge) to 7=E7FFFF and
+; 15=FFEFEF (highlight), so each pixel gets a colour word (Spec256 index 0 stays 8000). Egg bitmap (set bits):
+; 8508 ..###...
+; 8509 .######.
+; 850A ########
+; 850B ########
+; 850C ########
+; 850D .######.
+; 850E ..###...
+808508	8000 8000 3DEB 56B1 3DEB 8000 8000 8000	; egg row 0: Spec256 - - 74 76 74 - - -
+808509	8000 4A4E 7F9F 7F9F 7F9F 7397 4A4E 8000	; egg row 1: Spec256 - 75 7 7 7 78 75 -
+80850A	4A4E 7F9F 77FD 7397 7397 6734 56B1 4A4E	; egg row 2: Spec256 75 7 15 78 78 77 76 75
+80850B	6734 7397 7397 7397 6734 56B1 56B1 7F9F	; egg row 3: Spec256 77 78 78 78 77 76 76 7
+80850C	4A4E 6734 6734 6734 56B1 56B1 7397 4A4E	; egg row 4: Spec256 75 77 77 77 76 76 78 75
+80850D	8000 6734 6734 7F9F 7F9F 7397 4A4E 8000	; egg row 5: Spec256 - 77 77 7 7 78 75 -
+80850E	8000 8000 3DEB 56B1 3DEB 8000 8000 8000	; egg row 6: Spec256 - - 74 76 74 - - -
+;
+; Ladders. Tiles 1 and 2 of the tile table (84F8-8507) are the left and the right half of one ladder: placed
+; side by side they make a block 16 pixels wide and 8 rows high that the game repeats downwards. Pixels are
+; numbered 0-15 across the block (tile 1 is 0-7, tile 2 is 8-15). The two rails are at 2-3 and 12-13, a rung
+; fills rows 3-4 between them (pixels 4-11), so the ladder is 12 pixels wide.
+; chuckie.gfx colours it with three Spec256 browns: 37=D29E7D (light), 36=BA8259 (one rung pixel) and
+; 35=A66539 (dark). Mr. Telmo asked for the tones of a wooden ladder picture (803c425187a6bd8.png, 17 browns)
+; instead. The picture is bigger than the ladder, so only its tones are used, laid out by role:
+;   left pixel of each rail (2, 12), by row   C7975F B38854 BD8F5A C4945E, repeating every 4 rows
+;   right pixel of each rail (3, 13), by row  695137 5E4730 634B31, repeating every 3 rows
+;   top row of a rung (row 3)                 9E784C at pixel 4, then B38854 BD8F5A C7975F BD8F5A repeating
+;   bottom row of a rung (row 4)              634B31 for pixels 4-7, 80613D for pixels 8-11
+; The Spec256 shades are only used to find which pixels are coloured (index 0 stays 8000).
+; To get the plain Spec256 colours back, use D29E7D, BA8259 and A66539 by the Spec256 index on each line.
+; Ladder bitmap (set bits), one byte per line, then the colour words:
+; tile 1 (pixels 0-7 of the block)
+; 84F8 ..##....
+; 84F9 ..##....
+; 84FA ..##....
+; 84FB ..######
+; 84FC ..######
+; 84FD ..##....
+; 84FE ..##....
+; 84FF ..##....
+; tile 2 (pixels 8-15 of the block)
+; 8500 ....##..
+; 8501 ....##..
+; 8502 ....##..
+; 8503 ######..
+; 8504 ######..
+; 8505 ....##..
+; 8506 ....##..
+; 8507 ....##..
+8084F8	8000 8000 4B0B 29A6 8000 8000 8000 8000	; ladder tile 1 row 0: Spec256 - - 37 35 - - - -
+8084F9	8000 8000 46CA 2166 8000 8000 8000 8000	; ladder tile 1 row 1: Spec256 - - 37 35 - - - -
+8084FA	8000 8000 46EB 2586 8000 8000 8000 8000	; ladder tile 1 row 2: Spec256 - - 37 35 - - - -
+8084FB	8000 8000 4B0B 29A6 3E69 46CA 46EB 4B0B	; ladder tile 1 row 3: Spec256 - - 37 35 36 37 37 37
+8084FC	8000 8000 4B0B 2166 2586 2586 2586 2586	; ladder tile 1 row 4: Spec256 - - 37 35 35 35 35 35
+8084FD	8000 8000 46CA 2586 8000 8000 8000 8000	; ladder tile 1 row 5: Spec256 - - 37 35 - - - -
+8084FE	8000 8000 46EB 29A6 8000 8000 8000 8000	; ladder tile 1 row 6: Spec256 - - 37 35 - - - -
+8084FF	8000 8000 4B0B 2166 8000 8000 8000 8000	; ladder tile 1 row 7: Spec256 - - 37 35 - - - -
+808500	8000 8000 8000 8000 4B0B 29A6 8000 8000	; ladder tile 2 row 0: Spec256 - - - - 37 35 - -
+808501	8000 8000 8000 8000 46CA 2166 8000 8000	; ladder tile 2 row 1: Spec256 - - - - 37 35 - -
+808502	8000 8000 8000 8000 46EB 2586 8000 8000	; ladder tile 2 row 2: Spec256 - - - - 37 35 - -
+808503	46EB 46CA 46EB 4B0B 4B0B 29A6 8000 8000	; ladder tile 2 row 3: Spec256 37 37 37 37 37 35 - -
+808504	3207 3207 3207 3207 4B0B 2166 8000 8000	; ladder tile 2 row 4: Spec256 35 35 35 35 37 35 - -
+808505	8000 8000 8000 8000 46CA 2586 8000 8000	; ladder tile 2 row 5: Spec256 - - - - 37 35 - -
+808506	8000 8000 8000 8000 46EB 29A6 8000 8000	; ladder tile 2 row 6: Spec256 - - - - 37 35 - -
+808507	8000 8000 8000 8000 4B0B 2166 8000 8000	; ladder tile 2 row 7: Spec256 - - - - 37 35 - -
+;
+; THE BRICKS (platforms), whose colours and pattern are different on each level. The brick is tile 5 of the tile
+; table (84F0 + 8 * 5 = 8518), used for every platform on every level: 8 pixels wide, rows 0-4 are the brick.
+; chuckie.gfx colours it with 66=BA3100 (red brick) where the bitmap has a set bit and 76=AEAE8A (mortar) where
+; it has a clear bit; the game's own pattern is brick / fill / brick / fill / brick, a 'fill' row being all mortar.
+; Here no pixel has a fixed colour. Each pixel holds a code FFF0 to FFF7, a slot of the translation register T
+; (FFF0 is T[7], FFF1 is T[6], ... FFF7 is T[0]), and the tile loops read it through T, so a level chooses its
+; colours and its pattern by what it puts in the slots. A level has a pattern, a colour for every pixel in each of
+; three patterns, and a pixel's slot is picked from the three:
+;   std    the game's own pattern, brick B and mortar M
+;   rows3  level 6: rows a a fill b b, brick B and mortar M
+;   straw  level 8: Y straw yellow, G gold, O orange, D dark orange
+; The tile has only 8 slots, so the three patterns must agree on which pixels share a slot. The slots, as
+; (std, rows3, straw) classes:
+;   FFF0  std B, rows3 B, straw Y
+;   FFF1  std B, rows3 B, straw G
+;   FFF2  std M, rows3 M, straw Y
+;   FFF3  std M, rows3 B, straw Y
+;   FFF4  std B, rows3 M, straw O
+;   FFF5  std M, rows3 M, straw O
+;   FFF6  std M, rows3 B, straw O
+;   FFF7  std B, rows3 B, straw D
+; A level with the std pattern gives every slot the brick or mortar colour of its std class, one with the rows3
+; pattern that of its rows3 class, and the straw level its own colour for each slot.
+; T is loaded from the pixels of the LAST byte of the level's map block (B110 + level * 2A0 + 29F; the map blocks
+; of levels 1 to 8 are at B3B0, B650, B8F0, BB90, BE30, C0D0, C370 and C610; later levels repeat them). Its eight
+; pixels, leftmost first, are T[0] to T[7], that is the slots FFF7 down to FFF0.
+; Plain means ZXInk (8001) for the brick and ZXPaper (8000) for the mortar: the bricks look as they do without a
+; driver, the colour the game gives the platforms. Level 5 follows the MSX version (a video screenshot of it): muted
+; green bricks, 4C8050, and pale mint mortar, 91B693, the two colours of its platforms (the game's own green was
+; too strong). They are plain RGB, not Spec256 palette colours. Level 6 is an experiment with the colours of level
+; 2 and the row order a / a / fill / b / b: brick row a (gap at pixel 5) twice, a fill row, brick row b (gap at pixel 1)
+; twice. Level 3 follows the C64 version (a video screenshot of it): grey bricks, 6C6C6C, the grey the C64 uses
+; (the platform lines in the picture sample at 6C6C6C to 757575), and black mortar, the plain paper. Level 8 follows
+; the platforms of a remake (a video screenshot of it): a straw yellow fringe on top over gold, then orange, with
+; the colours read from the picture, DFCF65, C9AF4A, A47F34, A55930 and 8E5325. Level 7 has the rows pattern of level
+; 6 in dark grey bricks, 82=616161, and light grey mortar, 85=BABABA, two of the Spec256 greys. Level 4 is the look of
+; level 5 turned from green to blue (same saturation and lightness, hue 0.60): bricks 4C6180 and mortar 91A0B6.
+; Only level 1 is plain.
+; Brick bitmap (set bits), one byte per line:
+; 8518 #####.##
+; 8519 ........
+; 851A #.######
+; 851B ........
+; 851C ###.####
+; 851D ........
+; 851E ........
+; 851F ........
+; Pixels, leftmost first (rows 5-7 of the tile stay as the game has them):
+808518	FFF0 FFF1 FFF0 FFF1 FFF0 FFF2 FFF1 FFF0	; brick row 0: std BBBBBMBB, rows3 BBBBBMBB, straw YGYGYYGY
+808519	FFF3 FFF3 FFF3 FFF3 FFF3 FFF2 FFF3 FFF3	; brick row 1: std MMMMMMMM, rows3 BBBBBMBB, straw YYYYYYYY
+80851A	FFF4 FFF5 FFF4 FFF4 FFF4 FFF4 FFF4 FFF4	; brick row 2: std BMBBBBBB, rows3 MMMMMMMM, straw OOOOOOOO
+80851B	FFF6 FFF5 FFF6 FFF6 FFF6 FFF6 FFF6 FFF6	; brick row 3: std MMMMMMMM, rows3 BMBBBBBB, straw OOOOOOOO
+80851C	FFF7 FFF4 FFF7 FFF6 FFF7 FFF7 FFF7 FFF7	; brick row 4: std BBBMBBBB, rows3 BMBBBBBB, straw DODODDDD
+;
+; Colours per level, in the last byte of each map block (leftmost pixel first: T[0] to T[7], the slots FFF7 to FFF0):
+80B64F	8001 8000 8000 8001 8000 8000 8001 8001	; level 1: plain
+80B8EF	1AE0 56B1 56B1 1AE0 56B1 56B1 1AE0 1AE0	; level 2: Spec256, brick 66=BA3100, mortar 76=AEAE8A
+80BB8F	35AD 8000 8000 35AD 8000 8000 35AD 35AD	; level 3: like the C64 version, brick 6C6C6C
+80BE2F	3130 5256 5256 3130 5256 5256 3130 3130	; level 4: level 5 turned blue, brick 4C6180, mortar 91A0B6
+80C0CF	412A 5A52 5A52 412A 5A52 5A52 412A 412A	; level 5: like the MSX version, brick 4C8050, mortar 91B693
+80C36F	1AE0 1AE0 56B1 56B1 1AE0 56B1 1AE0 1AE0	; level 6: the colours of level 2, rows: a a fill b b, brick 66=BA3100, mortar 76=AEAE8A
+80C60F	318C 318C 5EF7 5EF7 318C 5EF7 318C 318C	; level 7: the pattern of level 6 in greys, brick 82=616161, mortar 85=BABABA
+80C8AF	2A24 2E86 3E86 3E86 5729 676C 5729 676C	; level 8: like the remake: straw yellow on top, orange below
+;
+; Palette entries for the hens (indirect colours, palette index 1010 and up, the flash half copied at 9010 and up):
+701010	7FFB	; 79=FFFFDB
+709010	701010	1
+701011	7FE0	; 71=FFFF00
+709011	701011	1
+701012	67A0	; 70=EFCE00
+709012	701012	1
+701013	5380	; 69=E3A200
+709013	701013	1
+; Bytes of the hens' frames that the original driver leaves to the colours of the last tag read:
+8090DC	8000 9011 9011 9011 8000 8000 8000 8000	; no line in the original: the colours of the last tag before it, byte 70
+8090DE	8000 9011 8000 9011 9011 8000 8000 8000	; no line in the original: the colours of the last tag before it, byte 58
+8090DF	8000 8000 8000 9011 9011 9011 9011 8000	; no line in the original: the colours of the last tag before it, byte 1E
+8090E0	8000 8000 9011 8000 8000 9011 9011 9011	; no line in the original: the colours of the last tag before it, byte 27
+8090E1	9011 9011 9011 9011 9011 9011 9011 9011	; no line in the original: the colours of the last tag before it, byte FF
+8090E2	8000 9011 8000 9011 8000 8000 8000 9011	; no line in the original: the colours of the last tag before it, byte 51
+8090E3	9011 9011 9011 9011 9011 9011 9011 9011	; no line in the original: the colours of the last tag before it, byte FF
+8090E5	8000 9011 9011 9011 9011 9011 9011 9011	; no line in the original: the colours of the last tag before it, byte 7F
+8090FD	8000 8000 8000 8000 9011 9011 9011 8000	; no line in the original: the colours of the last tag before it, byte 0E
+8090FE	8000 9011 9011 9011 9011 8000 8000 8000	; no line in the original: the colours of the last tag before it, byte 78
+8090FF	8000 8000 8000 9011 9011 8000 9011 8000	; no line in the original: the colours of the last tag before it, byte 1A
+809100	9011 9011 9011 9011 9011 9011 9011 9011	; no line in the original: the colours of the last tag before it, byte FF
+809101	9011 9011 9011 8000 8000 9011 8000 8000	; no line in the original: the colours of the last tag before it, byte E4
+809102	9011 9011 9011 9011 9011 9011 9011 9011	; no line in the original: the colours of the last tag before it, byte FF
+809103	9011 8000 8000 8000 9011 8000 9011 8000	; no line in the original: the colours of the last tag before it, byte 8A
+
+; ----------------------------------------------------------------------------------------------------------------
+; THE GAME WITH FAST2 (tmp/ChuckieEgg, src/fast2.asm), as built for the tape with the tunes.  The commands above are for
+; the original routines, which this game still runs in part.  The commands below are for the patch's own drawing code.
+; Each stands for what its Z80 instruction does to the data, done to the pixels' colour words (registers: A = 3, C = 4,
+; B = 5, E = 6, D = 7, L = 8, H = 9).  The hens' frames above (809010-80910F) have their colour tags written out as
+; colour words (lines marked "was FFFC").  Made by scripts/mk_dux2.py from the listing of the build.
+10CCC5	C088	; box: tags on, before the tile bytes are read
+10CCDF	0131	; box: sprite column byte over tile byte
+10CCE0	0930	; box: sprite column byte over tile byte
+10CCE1	0113	; box: sprite column byte over tile byte
+10CCE5	0131	; box: sprite column byte over tile byte
+10CCE6	0930	; box: sprite column byte over tile byte
+10CCE7	0113	; box: sprite column byte over tile byte
+10CCEB	0131	; box: sprite column byte over tile byte
+10CCEC	0930	; box: sprite column byte over tile byte
+10CCED	0113	; box: sprite column byte over tile byte
+10CCF1	0131	; box: sprite column byte over tile byte
+10CCF2	0930	; box: sprite column byte over tile byte
+10CCF3	0113	; box: sprite column byte over tile byte
+10CCF7	0131	; box: sprite column byte over tile byte
+10CCF8	0930	; box: sprite column byte over tile byte
+10CCF9	0113	; box: sprite column byte over tile byte
+10CCFD	0131	; box: sprite column byte over tile byte
+10CCFE	0930	; box: sprite column byte over tile byte
+10CCFF	0113	; box: sprite column byte over tile byte
+10CD03	0131	; box: sprite column byte over tile byte
+10CD04	0930	; box: sprite column byte over tile byte
+10CD05	0113	; box: sprite column byte over tile byte
+10CD09	0131	; box: sprite column byte over tile byte
+10CD0A	0930	; box: sprite column byte over tile byte
+10CD0B	0113	; box: sprite column byte over tile byte
+10CD29	0131	; box: sprite column byte over tile byte
+10CD2A	0930	; box: sprite column byte over tile byte
+10CD2B	0113	; box: sprite column byte over tile byte
+10CD2F	0131	; box: sprite column byte over tile byte
+10CD30	0930	; box: sprite column byte over tile byte
+10CD31	0113	; box: sprite column byte over tile byte
+10CD35	0131	; box: sprite column byte over tile byte
+10CD36	0930	; box: sprite column byte over tile byte
+10CD37	0113	; box: sprite column byte over tile byte
+10CD3B	0131	; box: sprite column byte over tile byte
+10CD3C	0930	; box: sprite column byte over tile byte
+10CD3D	0113	; box: sprite column byte over tile byte
+10CD41	0131	; box: sprite column byte over tile byte
+10CD42	0930	; box: sprite column byte over tile byte
+10CD43	0113	; box: sprite column byte over tile byte
+10CD47	0131	; box: sprite column byte over tile byte
+10CD48	0930	; box: sprite column byte over tile byte
+10CD49	0113	; box: sprite column byte over tile byte
+10CD4D	0131	; box: sprite column byte over tile byte
+10CD4E	0930	; box: sprite column byte over tile byte
+10CD4F	0113	; box: sprite column byte over tile byte
+10CD53	0131	; box: sprite column byte over tile byte
+10CD54	0930	; box: sprite column byte over tile byte
+10CD55	0113	; box: sprite column byte over tile byte
+10CD74	0131	; box: sprite column byte over tile byte
+10CD75	0930	; box: sprite column byte over tile byte
+10CD76	0113	; box: sprite column byte over tile byte
+10CD7A	0131	; box: sprite column byte over tile byte
+10CD7B	0930	; box: sprite column byte over tile byte
+10CD7C	0113	; box: sprite column byte over tile byte
+10CD80	0131	; box: sprite column byte over tile byte
+10CD81	0930	; box: sprite column byte over tile byte
+10CD82	0113	; box: sprite column byte over tile byte
+10CD86	0131	; box: sprite column byte over tile byte
+10CD87	0930	; box: sprite column byte over tile byte
+10CD88	0113	; box: sprite column byte over tile byte
+10CD8C	0131	; box: sprite column byte over tile byte
+10CD8D	0930	; box: sprite column byte over tile byte
+10CD8E	0113	; box: sprite column byte over tile byte
+10CD92	0131	; box: sprite column byte over tile byte
+10CD93	0930	; box: sprite column byte over tile byte
+10CD94	0113	; box: sprite column byte over tile byte
+10CD98	0131	; box: sprite column byte over tile byte
+10CD99	0930	; box: sprite column byte over tile byte
+10CD9A	0113	; box: sprite column byte over tile byte
+10CD9E	0131	; box: sprite column byte over tile byte
+10CD9F	0930	; box: sprite column byte over tile byte
+10CDA0	0113	; box: sprite column byte over tile byte
+10CDAA	C888	; box: tags off
+10CE9A	C888	; window: tags off, after the window
+10D012	C088	; window: tags on, before the tile bytes are read
+10D02D	0131	; window: sprite column byte over tile byte
+10D02E	0930	; window: sprite column byte over tile byte
+10D02F	0113	; window: sprite column byte over tile byte
+10D033	0131	; window: sprite column byte over tile byte
+10D034	0930	; window: sprite column byte over tile byte
+10D035	0113	; window: sprite column byte over tile byte
+10D039	0131	; window: sprite column byte over tile byte
+10D03A	0930	; window: sprite column byte over tile byte
+10D03B	0113	; window: sprite column byte over tile byte
+10D03F	0131	; window: sprite column byte over tile byte
+10D040	0930	; window: sprite column byte over tile byte
+10D041	0113	; window: sprite column byte over tile byte
+10D045	0131	; window: sprite column byte over tile byte
+10D046	0930	; window: sprite column byte over tile byte
+10D047	0113	; window: sprite column byte over tile byte
+10D04B	0131	; window: sprite column byte over tile byte
+10D04C	0930	; window: sprite column byte over tile byte
+10D04D	0113	; window: sprite column byte over tile byte
+10D051	0131	; window: sprite column byte over tile byte
+10D052	0930	; window: sprite column byte over tile byte
+10D053	0113	; window: sprite column byte over tile byte
+10D057	0131	; window: sprite column byte over tile byte
+10D058	0930	; window: sprite column byte over tile byte
+10D059	0113	; window: sprite column byte over tile byte
+10D078	0131	; window: sprite column byte over tile byte
+10D079	0930	; window: sprite column byte over tile byte
+10D07A	0113	; window: sprite column byte over tile byte
+10D07E	0131	; window: sprite column byte over tile byte
+10D07F	0930	; window: sprite column byte over tile byte
+10D080	0113	; window: sprite column byte over tile byte
+10D084	0131	; window: sprite column byte over tile byte
+10D085	0930	; window: sprite column byte over tile byte
+10D086	0113	; window: sprite column byte over tile byte
+10D08A	0131	; window: sprite column byte over tile byte
+10D08B	0930	; window: sprite column byte over tile byte
+10D08C	0113	; window: sprite column byte over tile byte
+10D090	0131	; window: sprite column byte over tile byte
+10D091	0930	; window: sprite column byte over tile byte
+10D092	0113	; window: sprite column byte over tile byte
+10D096	0131	; window: sprite column byte over tile byte
+10D097	0930	; window: sprite column byte over tile byte
+10D098	0113	; window: sprite column byte over tile byte
+10D09C	0131	; window: sprite column byte over tile byte
+10D09D	0930	; window: sprite column byte over tile byte
+10D09E	0113	; window: sprite column byte over tile byte
+10D0A2	0131	; window: sprite column byte over tile byte
+10D0A3	0930	; window: sprite column byte over tile byte
+10D0A4	0113	; window: sprite column byte over tile byte
+10D0C3	0131	; window: sprite column byte over tile byte
+10D0C4	0930	; window: sprite column byte over tile byte
+10D0C5	0113	; window: sprite column byte over tile byte
+10D0C9	0131	; window: sprite column byte over tile byte
+10D0CA	0930	; window: sprite column byte over tile byte
+10D0CB	0113	; window: sprite column byte over tile byte
+10D0CF	0131	; window: sprite column byte over tile byte
+10D0D0	0930	; window: sprite column byte over tile byte
+10D0D1	0113	; window: sprite column byte over tile byte
+10D0D5	0131	; window: sprite column byte over tile byte
+10D0D6	0930	; window: sprite column byte over tile byte
+10D0D7	0113	; window: sprite column byte over tile byte
+10D0DB	0131	; window: sprite column byte over tile byte
+10D0DC	0930	; window: sprite column byte over tile byte
+10D0DD	0113	; window: sprite column byte over tile byte
+10D0E1	0131	; window: sprite column byte over tile byte
+10D0E2	0930	; window: sprite column byte over tile byte
+10D0E3	0113	; window: sprite column byte over tile byte
+10D0E7	0131	; window: sprite column byte over tile byte
+10D0E8	0930	; window: sprite column byte over tile byte
+10D0E9	0113	; window: sprite column byte over tile byte
+10D0ED	0131	; window: sprite column byte over tile byte
+10D0EE	0930	; window: sprite column byte over tile byte
+10D0EF	0113	; window: sprite column byte over tile byte
+10D10E	0131	; window: sprite column byte over tile byte
+10D10F	0930	; window: sprite column byte over tile byte
+10D110	0113	; window: sprite column byte over tile byte
+10D114	0131	; window: sprite column byte over tile byte
+10D115	0930	; window: sprite column byte over tile byte
+10D116	0113	; window: sprite column byte over tile byte
+10D11A	0131	; window: sprite column byte over tile byte
+10D11B	0930	; window: sprite column byte over tile byte
+10D11C	0113	; window: sprite column byte over tile byte
+10D120	0131	; window: sprite column byte over tile byte
+10D121	0930	; window: sprite column byte over tile byte
+10D122	0113	; window: sprite column byte over tile byte
+10D126	0131	; window: sprite column byte over tile byte
+10D127	0930	; window: sprite column byte over tile byte
+10D128	0113	; window: sprite column byte over tile byte
+10D12C	0131	; window: sprite column byte over tile byte
+10D12D	0930	; window: sprite column byte over tile byte
+10D12E	0113	; window: sprite column byte over tile byte
+10D132	0131	; window: sprite column byte over tile byte
+10D133	0930	; window: sprite column byte over tile byte
+10D134	0113	; window: sprite column byte over tile byte
+10D138	0131	; window: sprite column byte over tile byte
+10D139	0930	; window: sprite column byte over tile byte
+10D13A	0113	; window: sprite column byte over tile byte
+10D172	0131	; shift_frame
+10D173	0173	; shift_frame
+10D175	0131	; shift_frame
+10D176	0163	; shift_frame
+10D178	6033	; shift_frame
+10D179	0117	; shift_frame
+10D17B	0116	; shift_frame
+10D17D	0113	; shift_frame
+10D187	0131	; shift_frame
+10D188	0173	; shift_frame
+10D18A	0131	; shift_frame
+10D18B	0163	; shift_frame
+10D18D	6033	; shift_frame
+10D18F	5A77	; shift_frame
+10D191	5C66	; shift_frame
+10D192	5C33	; shift_frame
+10D193	0117	; shift_frame
+10D195	0116	; shift_frame
+10D197	0113	; shift_frame
+10D1A1	0131	; shift_frame
+10D1A2	0173	; shift_frame
+10D1A4	0131	; shift_frame
+10D1A5	0163	; shift_frame
+10D1A7	6033	; shift_frame
+10D1A9	5A77	; shift_frame
+10D1AB	5C66	; shift_frame
+10D1AC	5C33	; shift_frame
+10D1AE	5A77	; shift_frame
+10D1B0	5C66	; shift_frame
+10D1B1	5C33	; shift_frame
+10D1B2	0117	; shift_frame
+10D1B4	0116	; shift_frame
+10D1B6	0113	; shift_frame
+10D1C0	0131	; shift_frame
+10D1C1	0173	; shift_frame
+10D1C3	0131	; shift_frame
+10D1C4	0163	; shift_frame
+10D1C6	6033	; shift_frame
+10D1C8	5A77	; shift_frame
+10D1CA	5C66	; shift_frame
+10D1CB	5C33	; shift_frame
+10D1CD	5A77	; shift_frame
+10D1CF	5C66	; shift_frame
+10D1D0	5C33	; shift_frame
+10D1D2	5A77	; shift_frame
+10D1D4	5C66	; shift_frame
+10D1D5	5C33	; shift_frame
+10D1D6	0117	; shift_frame
+10D1D8	0116	; shift_frame
+10D1DA	0113	; shift_frame
+10D1E4	0131	; shift_frame
+10D1E5	0173	; shift_frame
+10D1E7	0131	; shift_frame
+10D1E8	0163	; shift_frame
+10D1EA	6033	; shift_frame
+10D1EC	5A77	; shift_frame
+10D1EE	5C66	; shift_frame
+10D1EF	5C33	; shift_frame
+10D1F1	5A77	; shift_frame
+10D1F3	5C66	; shift_frame
+10D1F4	5C33	; shift_frame
+10D1F6	5A77	; shift_frame
+10D1F8	5C66	; shift_frame
+10D1F9	5C33	; shift_frame
+10D1FB	5A77	; shift_frame
+10D1FD	5C66	; shift_frame
+10D1FE	5C33	; shift_frame
+10D1FF	0117	; shift_frame
+10D201	0116	; shift_frame
+10D203	0113	; shift_frame
+10D20D	0131	; shift_frame
+10D20E	0173	; shift_frame
+10D210	0131	; shift_frame
+10D211	0163	; shift_frame
+10D213	6033	; shift_frame
+10D215	5266	; shift_frame
+10D217	5477	; shift_frame
+10D218	5433	; shift_frame
+10D21A	5266	; shift_frame
+10D21C	5477	; shift_frame
+10D21D	5433	; shift_frame
+10D21F	5266	; shift_frame
+10D221	5477	; shift_frame
+10D222	5433	; shift_frame
+10D223	0113	; shift_frame
+10D225	0117	; shift_frame
+10D227	0116	; shift_frame
+10D231	0131	; shift_frame
+10D232	0173	; shift_frame
+10D234	0131	; shift_frame
+10D235	0163	; shift_frame
+10D237	6033	; shift_frame
+10D239	5266	; shift_frame
+10D23B	5477	; shift_frame
+10D23C	5433	; shift_frame
+10D23E	5266	; shift_frame
+10D240	5477	; shift_frame
+10D241	5433	; shift_frame
+10D242	0113	; shift_frame
+10D244	0117	; shift_frame
+10D246	0116	; shift_frame
+10D250	0131	; shift_frame
+10D251	0173	; shift_frame
+10D253	0131	; shift_frame
+10D254	0163	; shift_frame
+10D256	6033	; shift_frame
+10D258	5266	; shift_frame
+10D25A	5477	; shift_frame
+10D25B	5433	; shift_frame
+10D25C	0113	; shift_frame
+10D25E	0117	; shift_frame
+10D260	0116	; shift_frame
+10D36A	0133	; attribute store: no pixel write
+10D396	0131	; or_sprite: column byte over screen byte
+10D397	0931	; or_sprite: column byte over screen byte
+10D398	0113	; or_sprite: column byte over screen byte
+10E1A8	C088	; compose: tags on, before the tile bytes are copied
+10E20C	0110	; compose: tile bytes into the buffer; tags off after each run
+10E21F	C888	; compose: tile bytes into the buffer; tags off after each run
+10E291	0131	; compose: sprite byte over the buffer byte
+10E292	0931	; compose: sprite byte over the buffer byte
+10E293	0113	; compose: sprite byte over the buffer byte
+10E29A	0131	; compose: sprite byte over the buffer byte
+10E29B	0931	; compose: sprite byte over the buffer byte
+10E29C	0113	; compose: sprite byte over the buffer byte
+10E352	0131	; compose: sprite byte over the buffer byte
+10E353	0931	; compose: sprite byte over the buffer byte
+10E354	0113	; compose: sprite byte over the buffer byte
+10E385	0131	; compose: the buffer to the screen
+10E386	0113	; compose: the buffer to the screen
+10E57B	0131	; or_hen: column byte over screen byte
+10E57C	0931	; or_hen: column byte over screen byte
+10E57D	0113	; or_hen: column byte over screen byte
+10E778	C888	; window: tags off, after the window
+10E842	0131	; build_cols: a frame byte into its column
+10E843	0113	; build_cols: a frame byte into its column
+10E849	0131	; build_cols: a frame byte into its column
+10E84A	0113	; build_cols: a frame byte into its column
