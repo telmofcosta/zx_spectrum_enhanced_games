@@ -19,6 +19,8 @@ bringing graphics extensions to life, currently implementing **Spec256**,
 
 ## Current developments
 
+- **[Chuckie Egg](Chuckie%20Egg/README.md)** – ULAX recolouring, a reworked
+  screen-rendering routine, and 128k AY music.
 
 
 ## References
