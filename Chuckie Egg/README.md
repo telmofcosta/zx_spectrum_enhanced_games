@@ -50,7 +50,7 @@ later levels repeat):
 
 ### Extra 8 level loop
 
-Chuckie Egg game design has 8 designs that repeat in a loop. What changes is what happens in each 8 levels loop.
+Chuckie Egg cycles through the same 8 level layouts in 8-level loops, varying the enemy setup on each pass:
 
 The original game's level loops follow this logic:
 
